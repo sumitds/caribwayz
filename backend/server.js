@@ -22,6 +22,7 @@ const adminRoutes = require('./src/routes/admin');
 const recordRoutes = require('./src/routes/records');
 
 require('./src/services/cronService');
+const runMigrations = require('./src/migrations/migrate');
 
 const app = express();
 
@@ -72,6 +73,9 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`CaribWayz API running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+
+runMigrations().then(() => {
+  app.listen(PORT, () => {
+    console.log(`CaribWayz API running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  });
 });
