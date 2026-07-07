@@ -1,0 +1,48 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --primary: #CC2229;
+  --primary-dark: #a81b21;
+  --secondary: #F5A623;
+  --success: #2D8C00;
+  --danger: #ef4444;
+  --warning: #F5A623;
+  --bg: #0d0d0d;
+  --bg-card: #1a1a1a;
+  --bg-input: #252525;
+  --text: #f0f0f0;
+  --text-muted: #888888;
+  --border: #2e2e2e;
+  --radius: 10px;
+  --sidebar-width: 260px;
+}
+
+html, body, #root {
+  height: 100%;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a { color: inherit; text-decoration: none; }
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+input, select, textarea {
+  font-family: inherit;
+}
+
+.leaflet-container {
+  border-radius: var(--radius);
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
