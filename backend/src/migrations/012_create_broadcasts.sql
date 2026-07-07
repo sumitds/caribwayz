@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS broadcasts (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  message TEXT NOT NULL,
+  type VARCHAR(50) NOT NULL,
+  scope VARCHAR(30) NOT NULL DEFAULT 'island_wide',
+  parish VARCHAR(100),
+  severity VARCHAR(20) NOT NULL DEFAULT 'info',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
