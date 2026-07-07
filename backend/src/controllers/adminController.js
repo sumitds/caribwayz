@@ -252,9 +252,99 @@ const updatePartnerStatus = async (req, res) => {
   }
 };
 
+// Sponsorships
+const getSponsorships = async (req, res) => {
+  try {
+    const { status } = req.query;
+    let sql = `SELECT s.*, u.name as user_name, u.email as user_email
+               FROM sponsorships s LEFT JOIN users u ON s.user_id = u.id WHERE 1=1`;
+    const params = [];
+    if (status) { params.push(status); sql += ` AND s.status = $${params.length}`; }
+    sql += ` ORDER BY s.created_at DESC`;
+    const result = await query(sql, params);
+    const counts = await query(`SELECT status, COUNT(*) FROM sponsorships GROUP BY status`);
+    const summary = {};
+    counts.rows.forEach(r => { summary[r.status] = parseInt(r.count); });
+    return success(res, { sponsorships: result.rows, summary });
+  } catch (err) {
+    console.error('Get sponsorships error:', err);
+    return error(res, 'Failed to fetch sponsorships', 500);
+  }
+};
+
+const updateSponsorshipStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, starts_at, expires_at, notes } = req.body;
+    const result = await query(
+      `UPDATE sponsorships SET
+         status = COALESCE($1, status),
+         starts_at = COALESCE($2::timestamptz, starts_at),
+         expires_at = COALESCE($3::timestamptz, expires_at),
+         notes = COALESCE($4, notes),
+         updated_at = NOW()
+       WHERE id = $5 RETURNING *`,
+      [status, starts_at || null, expires_at || null, notes || null, id]
+    );
+    if (result.rows.length === 0) return notFound(res, 'Sponsorship not found');
+    return success(res, { sponsorship: result.rows[0] }, 'Sponsorship updated');
+  } catch (err) {
+    console.error('Update sponsorship error:', err);
+    return error(res, 'Failed to update sponsorship', 500);
+  }
+};
+
+// Payouts
+const getPayouts = async (req, res) => {
+  try {
+    const { status } = req.query;
+    let sql = `SELECT p.*, u.name as user_name, u.email as user_email,
+                      a.name as processed_by_name
+               FROM payouts p
+               LEFT JOIN users u ON p.user_id = u.id
+               LEFT JOIN users a ON p.processed_by = a.id
+               WHERE 1=1`;
+    const params = [];
+    if (status) { params.push(status); sql += ` AND p.status = $${params.length}`; }
+    sql += ` ORDER BY p.requested_at DESC`;
+    const result = await query(sql, params);
+    const totals = await query(`SELECT status, COUNT(*), SUM(amount) FROM payouts GROUP BY status`);
+    const summary = {};
+    totals.rows.forEach(r => { summary[r.status] = { count: parseInt(r.count), total: parseFloat(r.sum || 0) }; });
+    return success(res, { payouts: result.rows, summary });
+  } catch (err) {
+    console.error('Get payouts error:', err);
+    return error(res, 'Failed to fetch payouts', 500);
+  }
+};
+
+const updatePayoutStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, note } = req.body;
+    const processed_at = (status === 'paid' || status === 'rejected') ? 'NOW()' : null;
+    const result = await query(
+      `UPDATE payouts SET
+         status = $1,
+         note = COALESCE($2, note),
+         processed_by = $3,
+         processed_at = ${processed_at ? 'NOW()' : 'processed_at'}
+       WHERE id = $4 RETURNING *`,
+      [status, note || null, req.user.id, id]
+    );
+    if (result.rows.length === 0) return notFound(res, 'Payout not found');
+    return success(res, { payout: result.rows[0] }, `Payout marked as ${status}`);
+  } catch (err) {
+    console.error('Update payout error:', err);
+    return error(res, 'Failed to update payout', 500);
+  }
+};
+
 module.exports = {
   getUsers, updateUserStatus, getAllReports, removeReport,
   addBusiness, getBusinesses, updateBusiness, getDashboardStats,
   getBroadcasts, createBroadcast, deleteBroadcast,
   getPartners, addPartner, updatePartnerStatus,
+  getSponsorships, updateSponsorshipStatus,
+  getPayouts, updatePayoutStatus,
 };

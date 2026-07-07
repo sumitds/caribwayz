@@ -7,6 +7,8 @@ const {
   addBusiness, getBusinesses, updateBusiness, getDashboardStats,
   getBroadcasts, createBroadcast, deleteBroadcast,
   getPartners, addPartner, updatePartnerStatus,
+  getSponsorships, updateSponsorshipStatus,
+  getPayouts, updatePayoutStatus,
 } = require('../controllers/adminController');
 
 router.use(authenticate, requireAdmin);
@@ -42,5 +44,11 @@ router.post('/partners', [
   body('entity_type').notEmpty().withMessage('Entity type is required'),
 ], validate, addPartner);
 router.patch('/partners/:id/status', updatePartnerStatus);
+
+router.get('/sponsorships', getSponsorships);
+router.patch('/sponsorships/:id', updateSponsorshipStatus);
+
+router.get('/payouts', getPayouts);
+router.patch('/payouts/:id', updatePayoutStatus);
 
 module.exports = router;

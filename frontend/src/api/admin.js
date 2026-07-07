@@ -19,3 +19,9 @@ export const deleteBroadcast = (id) => api.delete(`/admin/broadcasts/${id}`);
 export const getPartners = (params) => api.get('/admin/partners', { params });
 export const addPartner = (data) => api.post('/admin/partners', data);
 export const updatePartnerStatus = (id, status) => api.patch(`/admin/partners/${id}/status`, { status });
+
+export const getSponsorships = (params) => api.get('/admin/sponsorships', { params });
+export const updateSponsorship = (id, data) => api.patch(`/admin/sponsorships/${id}`, data);
+
+export const getPayouts = (params) => api.get('/admin/payouts', { params });
+export const updatePayout = (id, data) => api.patch(`/admin/payouts/${id}`, data);
