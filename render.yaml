@@ -1,5 +1,5 @@
 ﻿databases:
-  - name: caribwayz-db
+  - name: caribwayz-db-new
     databaseName: caribwayz
     user: caribwayz
     plan: free
@@ -7,7 +7,7 @@
 services:
   # Backend API
   - type: web
-    name: caribwayz-api
+    name: caribwayz-api-new
     runtime: node
     plan: starter
     rootDir: backend
@@ -19,25 +19,25 @@ services:
         value: production
       - key: DATABASE_URL
         fromDatabase:
-          name: caribwayz-db
+          name: caribwayz-db-new
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: 7d
       - key: FRONTEND_URL
-        value: https://caribwayz.onrender.com
+        value: https://caribwayz-frontend-new.onrender.com
 
   # Frontend Static Site
   - type: web
-    name: caribwayz
+    name: caribwayz-frontend-new
     runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://caribwayz-api.onrender.com/api/v1
+        value: https://caribwayz-api-new.onrender.com/api/v1
     headers:
       - path: /*
         name: Cache-Control
