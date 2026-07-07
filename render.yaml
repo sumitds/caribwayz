@@ -32,7 +32,6 @@ services:
   - type: web
     name: caribwayz
     runtime: static
-    plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
