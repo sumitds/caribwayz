@@ -4,6 +4,7 @@ import {
   MdMap, MdRoute, MdWarning, MdSos, MdGroup,
   MdPerson, MdDashboard, MdBusiness, MdPeople,
   MdLogout, MdCampaign, MdHandshake, MdShield, MdDescription,
+  MdStorefront, MdPayments,
 } from 'react-icons/md';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -25,6 +26,8 @@ const adminNavItems = [
   { to: '/admin/users', icon: MdPeople, label: 'Manage Users' },
   { to: '/admin/businesses', icon: MdBusiness, label: 'Business Listings' },
   { to: '/admin/partners', icon: MdHandshake, label: 'Partners' },
+  { to: '/admin/sponsorships', icon: MdStorefront, label: 'Sponsorships' },
+  { to: '/admin/payouts', icon: MdPayments, label: 'Driver Payouts' },
 ];
 
 const Sidebar = () => {

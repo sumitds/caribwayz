@@ -28,6 +28,8 @@ import AdminReports from './pages/Admin/AdminReports';
 import AdminBusinesses from './pages/Admin/AdminBusinesses';
 import AdminBroadcast from './pages/Admin/AdminBroadcast';
 import AdminPartners from './pages/Admin/AdminPartners';
+import AdminSponsorships from './pages/Admin/AdminSponsorships';
+import AdminPayouts from './pages/Admin/AdminPayouts';
 
 const App = () => (
   <AuthProvider>
@@ -59,6 +61,8 @@ const App = () => (
       <Route path="/admin/reports" element={<ProtectedRoute adminOnly><AdminReports /></ProtectedRoute>} />
       <Route path="/admin/businesses" element={<ProtectedRoute adminOnly><AdminBusinesses /></ProtectedRoute>} />
       <Route path="/admin/partners" element={<ProtectedRoute adminOnly><AdminPartners /></ProtectedRoute>} />
+      <Route path="/admin/sponsorships" element={<ProtectedRoute adminOnly><AdminSponsorships /></ProtectedRoute>} />
+      <Route path="/admin/payouts" element={<ProtectedRoute adminOnly><AdminPayouts /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
