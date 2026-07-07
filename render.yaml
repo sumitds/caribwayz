@@ -9,7 +9,7 @@ services:
   - type: web
     name: caribwayz-api
     runtime: node
-    plan: free
+    plan: starter
     rootDir: backend
     buildCommand: npm install
     startCommand: node server.js
