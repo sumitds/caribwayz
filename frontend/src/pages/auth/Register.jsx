@@ -39,8 +39,8 @@ const Register = () => {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '1rem' }}>
       <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '2.5rem', width: '100%', maxWidth: '440px' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#D12229' }}>
-            Carib<span style={{ color: '#3AAA3A' }}>Wayz</span>
+          <h1 style={{ fontSize: '2rem', fontWeight: 800 }}>
+            <span style={{ color: '#D12229' }}>Ca</span><span style={{ color: '#F5A623' }}>rib</span><span style={{ color: '#3AAA3A' }}>Wa</span><span style={{ color: '#ffffff' }}>yz</span>
           </h1>
           <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Create your account</p>
         </div>
