@@ -61,7 +61,7 @@ const AdminDashboard = () => {
     <Layout>
       <div style={{ marginBottom: '1.75rem' }}>
         <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>
-          <span style={{ color: '#CC2229' }}>Carib</span><span style={{ color: '#F5A623' }}>Wayz</span> Command Center
+          <span style={{ color: '#D12229' }}>Ca</span><span style={{ color: '#F5A623' }}>rib</span><span style={{ color: '#3AAA3A' }}>Wa</span><span style={{ color: '#000000' }}>yz</span> Command Center
         </h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.3rem' }}>
           Real-time overview of platform activity across the Caribbean
