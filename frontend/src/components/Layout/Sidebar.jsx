@@ -45,8 +45,8 @@ const Sidebar = () => {
   const linkStyle = ({ isActive }) => ({
     display: 'flex', alignItems: 'center', gap: '0.75rem',
     padding: '0.65rem 1rem', borderRadius: 8,
-    color: isActive ? '#D12229' : '#555555',
-    background: isActive ? '#D1222912' : 'transparent',
+    color: isActive ? '#F5A623' : 'rgba(255,255,255,0.6)',
+    background: isActive ? 'rgba(245,166,35,0.12)' : 'transparent',
     fontWeight: isActive ? 700 : 400, fontSize: '0.9rem',
     transition: 'all 0.15s',
     textDecoration: 'none',
@@ -54,21 +54,21 @@ const Sidebar = () => {
 
   return (
     <aside style={{
-      width: 'var(--sidebar-width)', background: '#ffffff',
-      borderRight: '1px solid #e5e5e5', display: 'flex',
+      width: 'var(--sidebar-width)', background: 'rgb(10, 26, 10)',
+      borderRight: '1px solid rgba(255,255,255,0.07)', display: 'flex',
       flexDirection: 'column', height: '100vh', position: 'fixed',
       top: 0, left: 0, zIndex: 100,
-      boxShadow: '2px 0 12px rgba(0,0,0,0.08)',
+      boxShadow: '2px 0 12px rgba(0,0,0,0.3)',
     }}>
       {/* Logo */}
-      <div style={{ padding: '1.2rem 1.2rem', borderBottom: '1px solid #f0f0f0' }}>
+      <div style={{ padding: '1.2rem 1.2rem', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <img src="/logo.jpg" alt="CaribWayz" style={{ width: 44, height: 44, objectFit: 'contain', borderRadius: 8, flexShrink: 0 }} />
           <div>
             <h1 style={{ fontSize: '1.3rem', fontWeight: 900, letterSpacing: '-0.01em' }}>
-              <span style={{ color: '#D12229' }}>Ca</span><span style={{ color: '#F5A623' }}>rib</span><span style={{ color: '#3AAA3A' }}>Wa</span><span style={{ color: '#000000' }}>yz</span>
+              <span style={{ color: '#D12229' }}>Ca</span><span style={{ color: '#F5A623' }}>rib</span><span style={{ color: '#3AAA3A' }}>Wa</span><span style={{ color: '#ffffff' }}>yz</span>
             </h1>
-            <p style={{ fontSize: '0.68rem', color: '#888', marginTop: '0.1rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', marginTop: '0.1rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               {isAdmin ? 'Admin Panel' : 'Navigate the Caribbean'}
             </p>
           </div>
@@ -85,7 +85,7 @@ const Sidebar = () => {
       <nav style={{ flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.1rem', overflowY: 'auto' }}>
         {isAdmin && (
           <div style={{ padding: '0 0.5rem', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#D12229', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#F5A623', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               Command Center
             </span>
           </div>
@@ -99,7 +99,7 @@ const Sidebar = () => {
       </nav>
 
       {/* User Footer */}
-      <div style={{ padding: '1rem 0.75rem', borderTop: '1px solid #f0f0f0' }}>
+      <div style={{ padding: '1rem 0.75rem', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', padding: '0 0.5rem' }}>
           <div style={{
             width: 34, height: 34, borderRadius: '50%',
@@ -110,8 +110,8 @@ const Sidebar = () => {
             {user?.name?.[0]?.toUpperCase()}
           </div>
           <div>
-            <div style={{ fontSize: '0.87rem', fontWeight: 600, color: '#111' }}>{user?.name}</div>
-            <div style={{ fontSize: '0.72rem', color: '#888', textTransform: 'capitalize' }}>{user?.role}</div>
+            <div style={{ fontSize: '0.87rem', fontWeight: 600, color: '#fff' }}>{user?.name}</div>
+            <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)', textTransform: 'capitalize' }}>{user?.role}</div>
           </div>
         </div>
         <button
@@ -119,13 +119,13 @@ const Sidebar = () => {
           style={{
             display: 'flex', alignItems: 'center', gap: '0.6rem',
             width: '100%', background: 'none', border: 'none',
-            color: '#888', padding: '0.5rem',
+            color: 'rgba(255,255,255,0.45)', padding: '0.5rem',
             borderRadius: 8, cursor: 'pointer',
             fontSize: '0.88rem', fontWeight: 500,
             transition: 'color 0.15s',
           }}
           onMouseEnter={(e) => e.currentTarget.style.color = '#D12229'}
-          onMouseLeave={(e) => e.currentTarget.style.color = '#888'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.45)'}
         >
           <MdLogout size={18} /> Logout
         </button>
