@@ -65,7 +65,7 @@ const Sidebar = () => {
           <img src="/logo.jpg" alt="CaribWayz" style={{ width: 44, height: 44, objectFit: 'contain', borderRadius: 8, flexShrink: 0 }} />
           <div>
             <h1 style={{ fontSize: '1.3rem', fontWeight: 900, letterSpacing: '-0.01em' }}>
-              <span style={{ color: '#CC2229' }}>Carib</span><span style={{ color: '#2D8C00' }}>Wayz</span>
+              <span style={{ color: '#C8272B' }}>Carib</span><span style={{ color: '#3CAA3C' }}>Wayz</span>
             </h1>
             <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.1rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               {isAdmin ? 'Admin Panel' : 'Navigate the Caribbean'}
