@@ -11,9 +11,9 @@
   --success: #2D8C00;
   --danger: #ef4444;
   --warning: #F5A623;
-  --bg: #0d0d0d;
-  --bg-card: #1a1a1a;
-  --bg-input: #252525;
+  --bg: rgb(10, 26, 10);
+  --bg-card: rgb(18, 42, 18);
+  --bg-input: rgb(26, 55, 26);
   --text: #f0f0f0;
   --text-muted: #888888;
   --border: #2e2e2e;
