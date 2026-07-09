@@ -44,38 +44,39 @@ const Sidebar = () => {
 
   const linkStyle = ({ isActive }) => ({
     display: 'flex', alignItems: 'center', gap: '0.75rem',
-    padding: '0.65rem 1rem', borderRadius: 'var(--radius)',
-    color: isActive ? 'var(--secondary)' : 'var(--text-muted)',
-    background: isActive ? 'rgba(245,166,35,0.1)' : 'transparent',
-    fontWeight: isActive ? 600 : 400, fontSize: '0.9rem',
+    padding: '0.65rem 1rem', borderRadius: 8,
+    color: isActive ? '#D12229' : '#555555',
+    background: isActive ? '#D1222912' : 'transparent',
+    fontWeight: isActive ? 700 : 400, fontSize: '0.9rem',
     transition: 'all 0.15s',
     textDecoration: 'none',
   });
 
   return (
     <aside style={{
-      width: 'var(--sidebar-width)', background: '#111111',
-      borderRight: '1px solid #CC222933', display: 'flex',
+      width: 'var(--sidebar-width)', background: '#ffffff',
+      borderRight: '1px solid #e5e5e5', display: 'flex',
       flexDirection: 'column', height: '100vh', position: 'fixed',
       top: 0, left: 0, zIndex: 100,
+      boxShadow: '2px 0 12px rgba(0,0,0,0.08)',
     }}>
       {/* Logo */}
-      <div style={{ padding: '1.2rem 1.2rem', borderBottom: '1px solid #CC222933' }}>
+      <div style={{ padding: '1.2rem 1.2rem', borderBottom: '1px solid #f0f0f0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <img src="/logo.jpg" alt="CaribWayz" style={{ width: 44, height: 44, objectFit: 'contain', borderRadius: 8, flexShrink: 0 }} />
           <div>
             <h1 style={{ fontSize: '1.3rem', fontWeight: 900, letterSpacing: '-0.01em' }}>
-              <span style={{ color: '#D12229' }}>Ca</span><span style={{ color: '#F5A623' }}>rib</span><span style={{ color: '#3AAA3A' }}>Wa</span><span style={{ color: '#ffffff' }}>yz</span>
+              <span style={{ color: '#D12229' }}>Ca</span><span style={{ color: '#F5A623' }}>rib</span><span style={{ color: '#3AAA3A' }}>Wa</span><span style={{ color: '#000000' }}>yz</span>
             </h1>
-            <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.1rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            <p style={{ fontSize: '0.68rem', color: '#888', marginTop: '0.1rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               {isAdmin ? 'Admin Panel' : 'Navigate the Caribbean'}
             </p>
           </div>
         </div>
         {isAdmin && (
           <div style={{ marginTop: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <MdShield size={12} color="#CC2229" />
-            <span style={{ fontSize: '0.7rem', color: '#CC2229', fontWeight: 700, letterSpacing: '0.05em' }}>ADMIN ACCESS</span>
+            <MdShield size={12} color="#D12229" />
+            <span style={{ fontSize: '0.7rem', color: '#D12229', fontWeight: 700, letterSpacing: '0.05em' }}>ADMIN ACCESS</span>
           </div>
         )}
       </div>
@@ -84,7 +85,7 @@ const Sidebar = () => {
       <nav style={{ flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.1rem', overflowY: 'auto' }}>
         {isAdmin && (
           <div style={{ padding: '0 0.5rem', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#CC2229', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#D12229', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               Command Center
             </span>
           </div>
@@ -98,19 +99,19 @@ const Sidebar = () => {
       </nav>
 
       {/* User Footer */}
-      <div style={{ padding: '1rem 0.75rem', borderTop: '1px solid #CC222933' }}>
+      <div style={{ padding: '1rem 0.75rem', borderTop: '1px solid #f0f0f0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', padding: '0 0.5rem' }}>
           <div style={{
             width: 34, height: 34, borderRadius: '50%',
-            background: 'linear-gradient(135deg, #CC2229, #F5A623)',
+            background: 'linear-gradient(135deg, #D12229, #F5A623)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 800, fontSize: '0.9rem', color: '#fff',
           }}>
             {user?.name?.[0]?.toUpperCase()}
           </div>
           <div>
-            <div style={{ fontSize: '0.87rem', fontWeight: 600 }}>{user?.name}</div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>{user?.role}</div>
+            <div style={{ fontSize: '0.87rem', fontWeight: 600, color: '#111' }}>{user?.name}</div>
+            <div style={{ fontSize: '0.72rem', color: '#888', textTransform: 'capitalize' }}>{user?.role}</div>
           </div>
         </div>
         <button
@@ -118,13 +119,13 @@ const Sidebar = () => {
           style={{
             display: 'flex', alignItems: 'center', gap: '0.6rem',
             width: '100%', background: 'none', border: 'none',
-            color: 'var(--text-muted)', padding: '0.5rem',
-            borderRadius: 'var(--radius)', cursor: 'pointer',
+            color: '#888', padding: '0.5rem',
+            borderRadius: 8, cursor: 'pointer',
             fontSize: '0.88rem', fontWeight: 500,
             transition: 'color 0.15s',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#D12229'}
+          onMouseLeave={(e) => e.currentTarget.style.color = '#888'}
         >
           <MdLogout size={18} /> Logout
         </button>
