@@ -40,8 +40,8 @@ const Login = () => {
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.85rem' }}>
             <img src="/logo.jpg" alt="CaribWayz" style={{ width: 72, height: 72, objectFit: 'contain', borderRadius: 16 }} />
           </div>
-          <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#C8272B' }}>
-            Carib<span style={{ color: '#3CAA3C' }}>Wayz</span>
+          <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#D12229' }}>
+            Carib<span style={{ color: '#3AAA3A' }}>Wayz</span>
           </h1>
           <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Sign in to your account</p>
         </div>
