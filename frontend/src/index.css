@@ -11,12 +11,12 @@
   --success: #2D8C00;
   --danger: #ef4444;
   --warning: #F5A623;
-  --bg: rgb(10, 26, 10);
-  --bg-card: rgb(18, 42, 18);
-  --bg-input: rgb(26, 55, 26);
-  --text: #f0f0f0;
-  --text-muted: #888888;
-  --border: #2e2e2e;
+  --bg: rgb(220, 242, 220);
+  --bg-card: #ffffff;
+  --bg-input: rgb(240, 250, 240);
+  --text: #111111;
+  --text-muted: #555555;
+  --border: rgb(185, 218, 185);
   --radius: 10px;
   --sidebar-width: 260px;
 }
