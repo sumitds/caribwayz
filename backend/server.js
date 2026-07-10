@@ -10,6 +10,8 @@ const swaggerSpec = require('./src/config/swagger');
 const { initFirebase } = require('./src/config/firebase');
 initFirebase();
 
+const { initWebSocket } = require('./src/services/wsService');
+
 const authRoutes = require('./src/routes/auth');
 const userRoutes = require('./src/routes/user');
 const routeRoutes = require('./src/routes/routes');
@@ -78,7 +80,8 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 5000;
 
 runMigrations().then(() => {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`CaribWayz API running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
   });
+  initWebSocket(server);
 });

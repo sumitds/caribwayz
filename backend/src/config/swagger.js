@@ -628,6 +628,22 @@ const options = {
           },
         },
       },
+      '/ws/groups/location': {
+        get: {
+          tags: ['Groups'],
+          summary: 'WebSocket — real-time group member locations',
+          description: `Connect via WebSocket (not HTTP) to receive live location updates for every member in a group.\n\n**URL:** \`wss://caribwayz-api-new.onrender.com/ws/groups/location?token=<JWT>&group_id=<uuid>\`\n\n**Query params (required):**\n- \`token\` — JWT from /auth/login\n- \`group_id\` — UUID of the group to subscribe to\n\n**On connect — server sends:**\n\`\`\`json\n{ "type": "connected", "group_id": "...", "user_id": "..." }\n\`\`\`\n\n**On each member location update — server broadcasts:**\n\`\`\`json\n{\n  "type": "location_update",\n  "user_id": "uuid",\n  "user_name": "John",\n  "current_latitude": 10.6918,\n  "current_longitude": -61.2225,\n  "timestamp": 1720000000000\n}\n\`\`\`\n\nUpdates are triggered automatically whenever a member calls \`POST /groups/{id}/location\`.`,
+          parameters: [
+            { name: 'token', in: 'query', required: true, schema: { type: 'string' }, description: 'JWT bearer token' },
+            { name: 'group_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Group to subscribe to' },
+          ],
+          responses: {
+            101: { description: 'Switching Protocols — WebSocket connection established' },
+            4001: { description: 'Missing token or group_id' },
+            4003: { description: 'Invalid or expired JWT' },
+          },
+        },
+      },
       '/groups/{id}/invite': {
         post: {
           tags: ['Groups'],

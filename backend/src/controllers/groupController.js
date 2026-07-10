@@ -2,6 +2,7 @@ const { query } = require('../config/db');
 const { success, created, error, notFound, forbidden } = require('../utils/response');
 const { getRealtimeDB } = require('../config/firebase');
 const { sendGroupInvite } = require('../services/emailService');
+const { broadcastLocation } = require('../services/wsService');
 
 const generateJoinCode = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -150,6 +151,9 @@ const updateLocation = async (req, res) => {
         updatedAt: Date.now(),
       });
     }
+
+    // Broadcast to all WebSocket clients in this group room
+    broadcastLocation(id, req.user.id, req.user.name, latitude, longitude);
 
     return success(res, {}, 'Location updated');
   } catch (err) {
