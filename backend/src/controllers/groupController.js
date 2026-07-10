@@ -1,6 +1,7 @@
 const { query } = require('../config/db');
 const { success, created, error, notFound, forbidden } = require('../utils/response');
 const { getRealtimeDB } = require('../config/firebase');
+const { sendGroupInvite } = require('../services/emailService');
 
 const generateJoinCode = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -157,4 +158,34 @@ const updateLocation = async (req, res) => {
   }
 };
 
-module.exports = { createGroup, joinGroup, getGroupDetails, leaveGroup, updateLocation };
+const inviteToGroup = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { email } = req.body;
+
+    const groupResult = await query('SELECT * FROM groups WHERE id = $1', [id]);
+    if (groupResult.rows.length === 0) return notFound(res, 'Group not found');
+
+    const group = groupResult.rows[0];
+
+    const member = await query(
+      `SELECT id FROM group_members WHERE group_id = $1 AND user_id = $2 AND status = 'active'`,
+      [id, req.user.id]
+    );
+    if (member.rows.length === 0) return forbidden(res, 'Only group members can send invites');
+
+    await sendGroupInvite({
+      toEmails: email,
+      groupName: group.group_name,
+      joinCode: group.join_code,
+      inviterName: req.user.name,
+    });
+
+    return success(res, { invited: email.length }, `Invitation sent to ${email.length} recipient(s)`);
+  } catch (err) {
+    console.error('Invite to group error:', err);
+    return error(res, 'Failed to send invitations', 500);
+  }
+};
+
+module.exports = { createGroup, joinGroup, getGroupDetails, leaveGroup, updateLocation, inviteToGroup };

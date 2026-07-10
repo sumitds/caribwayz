@@ -628,6 +628,40 @@ const options = {
           },
         },
       },
+      '/groups/{id}/invite': {
+        post: {
+          tags: ['Groups'],
+          summary: 'Send group invitations via email',
+          description: 'Sends an email with the group join code to one or more addresses. Caller must be an active group member.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['email'],
+                  properties: {
+                    email: {
+                      type: 'array',
+                      items: { type: 'string', format: 'email' },
+                      example: ['abc@mail.com', 'xyz@mail.com'],
+                      description: 'List of email addresses to invite',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: 'Invitations sent successfully' },
+            400: { description: 'Validation error — invalid email format or empty array' },
+            403: { description: 'Caller is not an active group member' },
+            404: { description: 'Group not found' },
+          },
+        },
+      },
       '/groups/{id}/leave': {
         post: {
           tags: ['Groups'],
