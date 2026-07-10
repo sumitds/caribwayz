@@ -10,7 +10,7 @@ const options = {
       contact: { name: 'CaribWayz Team' },
     },
     servers: [
-      { url: 'https://caribwayz-api.onrender.com/api/v1', description: 'Production' },
+      { url: 'https://caribwayz-api-new.onrender.com/api/v1', description: 'Production' },
       { url: 'http://localhost:5000/api/v1', description: 'Local Development' },
     ],
     components: {
