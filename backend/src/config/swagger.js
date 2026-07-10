@@ -583,7 +583,11 @@ const options = {
                 schema: {
                   type: 'object',
                   required: ['join_code'],
-                  properties: { join_code: { type: 'string', example: 'ABC123' } },
+                  properties: {
+                    join_code: { type: 'string', example: 'ABC123' },
+                    current_latitude: { type: 'number', example: 10.6918, description: 'Joiner current latitude' },
+                    current_longitude: { type: 'number', example: -61.2225, description: 'Joiner current longitude' },
+                  },
                 },
               },
             },
