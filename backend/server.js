@@ -38,9 +38,16 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Health check must be before rate limiter — Render pings this every ~30s
+// and the limiter would return 429, causing repeated 502 Bad Gateway errors.
+app.get('/api/v1/health', (req, res) => {
+  res.json({ success: true, message: 'CaribWayz API is running', version: '1.0.0' });
+});
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  skip: (req) => req.path === '/api/v1/health',
   message: { success: false, message: 'Too many requests, please try again later.' },
 });
 app.use('/api/', limiter);
@@ -55,10 +62,6 @@ app.use('/api/v1/groups', groupRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/records', recordRoutes);
-
-app.get('/api/v1/health', (req, res) => {
-  res.json({ success: true, message: 'CaribWayz API is running', version: '1.0.0' });
-});
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
