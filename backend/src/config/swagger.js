@@ -802,6 +802,46 @@ const options = {
           },
         },
       },
+      '/reports/history/{user_id}': {
+        get: {
+          tags: ['Reports'],
+          summary: 'Get report history for a user',
+          description: 'Returns all reports submitted by the specified user. Supports filtering by type and status, with pagination.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'user_id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'UUID of the user' },
+            { name: 'type', in: 'query', schema: { type: 'string', enum: ['police', 'construction', 'hazard', 'traffic', 'other'] }, description: 'Filter by report type' },
+            { name: 'status', in: 'query', schema: { type: 'string', enum: ['active', 'expired', 'removed'] }, description: 'Filter by status' },
+            { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 }, description: 'Number of results per page' },
+            { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 }, description: 'Pagination offset' },
+          ],
+          responses: {
+            200: {
+              description: 'Paginated report history',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          reports: { type: 'array', items: { $ref: '#/components/schemas/Report' } },
+                          total: { type: 'integer', example: 15 },
+                          limit: { type: 'integer', example: 20 },
+                          offset: { type: 'integer', example: 0 },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            401: { description: 'Unauthorized' },
+          },
+        },
+      },
       '/reports/nearby': {
         get: {
           tags: ['Reports'],

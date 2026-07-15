@@ -95,4 +95,50 @@ const confirmReport = async (req, res) => {
   }
 };
 
-module.exports = { submitReport, getNearbyReports, confirmReport };
+const getReportHistory = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const { type, status, limit = 20, offset = 0 } = req.query;
+
+    const params = [user_id];
+    let filters = '';
+
+    if (type) {
+      params.push(type);
+      filters += ` AND r.type = $${params.length}`;
+    }
+    if (status) {
+      params.push(status);
+      filters += ` AND r.status = $${params.length}`;
+    }
+
+    params.push(parseInt(limit), parseInt(offset));
+
+    const result = await query(
+      `SELECT r.*,
+              CASE WHEN r.expires_at < NOW() THEN 'expired' ELSE r.status END AS current_status
+       FROM reports r
+       WHERE r.user_id = $1 ${filters}
+       ORDER BY r.created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+
+    const countResult = await query(
+      `SELECT COUNT(*) FROM reports r WHERE r.user_id = $1 ${filters}`,
+      params.slice(0, params.length - 2)
+    );
+
+    return success(res, {
+      reports: result.rows,
+      total: parseInt(countResult.rows[0].count),
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    });
+  } catch (err) {
+    console.error('Get report history error:', err);
+    return error(res, 'Failed to fetch report history', 500);
+  }
+};
+
+module.exports = { submitReport, getNearbyReports, confirmReport, getReportHistory };
