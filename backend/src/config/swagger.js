@@ -598,6 +598,65 @@ const options = {
           },
         },
       },
+      '/groups/user/{user_id}': {
+        get: {
+          tags: ['Groups'],
+          summary: 'Get all groups for a user',
+          description: 'Returns all active groups the specified user is a member of, ordered by most recently joined.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: 'user_id',
+              in: 'path',
+              required: true,
+              schema: { type: 'string', format: 'uuid' },
+              description: 'UUID of the user',
+              example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'List of groups the user belongs to',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          groups: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                id: { type: 'string', format: 'uuid' },
+                                group_name: { type: 'string', example: 'Family Trip' },
+                                join_code: { type: 'string', example: 'ABC123' },
+                                destination_lat: { type: 'number', nullable: true },
+                                destination_lng: { type: 'number', nullable: true },
+                                destination_address: { type: 'string', nullable: true },
+                                created_by: { type: 'string', format: 'uuid' },
+                                created_by_name: { type: 'string', example: 'John Doe' },
+                                joined_at: { type: 'string', format: 'date-time' },
+                                member_status: { type: 'string', example: 'active' },
+                                created_at: { type: 'string', format: 'date-time' },
+                              },
+                            },
+                          },
+                          total: { type: 'integer', example: 3 },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            401: { description: 'Unauthorized' },
+          },
+        },
+      },
       '/groups/{id}': {
         get: {
           tags: ['Groups'],

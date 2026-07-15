@@ -162,6 +162,28 @@ const updateLocation = async (req, res) => {
   }
 };
 
+const getGroupsByUser = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+
+    const result = await query(
+      `SELECT g.*, gm.joined_at, gm.status AS member_status,
+              u.name AS created_by_name
+       FROM groups g
+       JOIN group_members gm ON gm.group_id = g.id
+       JOIN users u ON u.id = g.created_by
+       WHERE gm.user_id = $1 AND gm.status = 'active'
+       ORDER BY gm.joined_at DESC`,
+      [user_id]
+    );
+
+    return success(res, { groups: result.rows, total: result.rowCount });
+  } catch (err) {
+    console.error('Get groups by user error:', err);
+    return error(res, 'Failed to fetch groups', 500);
+  }
+};
+
 const inviteToGroup = async (req, res) => {
   try {
     const { id } = req.params;
@@ -192,4 +214,4 @@ const inviteToGroup = async (req, res) => {
   }
 };
 
-module.exports = { createGroup, joinGroup, getGroupDetails, leaveGroup, updateLocation, inviteToGroup };
+module.exports = { createGroup, joinGroup, getGroupDetails, leaveGroup, updateLocation, inviteToGroup, getGroupsByUser };

@@ -2,7 +2,7 @@ const router = require('express').Router();
 const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 const { authenticate } = require('../middleware/auth');
-const { createGroup, joinGroup, getGroupDetails, leaveGroup, updateLocation, inviteToGroup } = require('../controllers/groupController');
+const { createGroup, joinGroup, getGroupDetails, leaveGroup, updateLocation, inviteToGroup, getGroupsByUser } = require('../controllers/groupController');
 
 router.use(authenticate);
 
@@ -20,6 +20,7 @@ router.post(
   joinGroup
 );
 
+router.get('/user/:user_id', getGroupsByUser);
 router.get('/:id', getGroupDetails);
 router.post('/:id/leave', leaveGroup);
 router.post('/:id/location', updateLocation);
