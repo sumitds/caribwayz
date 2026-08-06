@@ -96,7 +96,29 @@ const getGroupDetails = async (req, res) => {
       [id]
     );
 
-    return success(res, { group: groupResult.rows[0], members: membersResult.rows });
+    // Fetch live locations from Firebase and merge into members
+    let locationMap = {};
+    try {
+      const db = getRealtimeDB();
+      if (db) {
+        const snapshot = await db.ref(`groups/${id}/locations`).once('value');
+        locationMap = snapshot.val() || {};
+      }
+    } catch (fbErr) {
+      console.warn('Firebase location fetch error:', fbErr.message);
+    }
+
+    const members = membersResult.rows.map((member) => {
+      const loc = locationMap[member.user_id];
+      return {
+        ...member,
+        current_latitude:  loc?.lat  ?? null,
+        current_longitude: loc?.lng  ?? null,
+        location_updated_at: loc?.updatedAt ?? null,
+      };
+    });
+
+    return success(res, { group: groupResult.rows[0], members });
   } catch (err) {
     console.error('Get group error:', err);
     return error(res, 'Failed to fetch group', 500);

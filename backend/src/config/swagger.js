@@ -676,7 +676,7 @@ const options = {
                         type: 'object',
                         properties: {
                           group: { $ref: '#/components/schemas/Group' },
-                          members: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, user_id: { type: 'string' }, name: { type: 'string' }, profile_image: { type: 'string', nullable: true }, status: { type: 'string' }, joined_at: { type: 'string' } } } },
+                          members: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, user_id: { type: 'string' }, name: { type: 'string' }, profile_image: { type: 'string', nullable: true }, status: { type: 'string' }, joined_at: { type: 'string' }, current_latitude: { type: 'number', nullable: true, example: 10.6918 }, current_longitude: { type: 'number', nullable: true, example: -61.2225 }, location_updated_at: { type: 'integer', nullable: true, description: 'Unix timestamp ms of last location update' } } } },
                         },
                       },
                     },
