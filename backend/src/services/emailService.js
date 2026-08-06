@@ -31,8 +31,14 @@ const sendGroupInvite = async ({ toEmails, groupName, joinCode, inviterName }) =
   await transporter.sendMail({
     from: `"CaribWayz" <${process.env.SMTP_USER}>`,
     to: toEmails.join(', '),
-    subject: `${inviterName} invited you to a CaribWayz group — "${groupName}"`,
+    subject: `${inviterName} invited you to join "${groupName}" on CaribWayz`,
     html,
+    text: `${inviterName} invited you to join "${groupName}" on CaribWayz.\n\nYour join code: ${joinCode}\n\nOpen CaribWayz and enter this code to join the group.`,
+    headers: {
+      'X-Priority': '3',
+      'X-Mailer': 'CaribWayz Mailer',
+      'List-Unsubscribe': `<mailto:${process.env.SMTP_USER}?subject=unsubscribe>`,
+    },
   });
 };
 
