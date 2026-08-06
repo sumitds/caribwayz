@@ -209,8 +209,11 @@ const inviteToGroup = async (req, res) => {
 
     return success(res, { invited: email.length }, `Invitation sent to ${email.length} recipient(s)`);
   } catch (err) {
-    console.error('Invite to group error:', err);
-    return error(res, 'Failed to send invitations', 500);
+    console.error('Invite to group error:', err.message || err);
+    const msg = err.message?.includes('SMTP') || err.message?.includes('auth') || err.code === 'EAUTH'
+      ? 'Email service not configured — check SMTP_USER and SMTP_PASS on the server'
+      : `Failed to send invitations: ${err.message}`;
+    return error(res, msg, 500);
   }
 };
 
