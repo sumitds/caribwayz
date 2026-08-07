@@ -47,7 +47,7 @@ const createGroup = async (req, res) => {
 
 const joinGroup = async (req, res) => {
   try {
-    const { join_code } = req.body;
+    const { join_code, current_latitude, current_longitude } = req.body;
 
     const groupResult = await query('SELECT * FROM groups WHERE join_code = $1', [join_code]);
     if (groupResult.rows.length === 0) return notFound(res, 'Invalid join code');
@@ -64,13 +64,18 @@ const joinGroup = async (req, res) => {
         return error(res, 'You are already a member of this group', 409);
       }
       await query(
-        'UPDATE group_members SET status = $1, joined_at = NOW() WHERE group_id = $2 AND user_id = $3',
-        ['active', group.id, req.user.id]
+        `UPDATE group_members
+         SET status = 'active', joined_at = NOW(),
+             current_latitude = $1, current_longitude = $2, location_updated_at = NOW()
+         WHERE group_id = $3 AND user_id = $4`,
+        [current_latitude ?? null, current_longitude ?? null, group.id, req.user.id]
       );
     } else {
       await query(
-        'INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)',
-        [group.id, req.user.id]
+        `INSERT INTO group_members (group_id, user_id, current_latitude, current_longitude, location_updated_at)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [group.id, req.user.id, current_latitude ?? null, current_longitude ?? null,
+         current_latitude ? new Date() : null]
       );
     }
 
@@ -89,34 +94,16 @@ const getGroupDetails = async (req, res) => {
     if (groupResult.rows.length === 0) return notFound(res, 'Group not found');
 
     const membersResult = await query(
-      `SELECT gm.id, gm.user_id, gm.joined_at, gm.status, u.name, u.profile_image
+      `SELECT gm.id, gm.user_id, gm.joined_at, gm.status,
+              gm.current_latitude, gm.current_longitude, gm.location_updated_at,
+              u.name, u.profile_image
        FROM group_members gm
        JOIN users u ON gm.user_id = u.id
        WHERE gm.group_id = $1 AND gm.status = 'active'`,
       [id]
     );
 
-    // Fetch live locations from Firebase and merge into members
-    let locationMap = {};
-    try {
-      const db = getRealtimeDB();
-      if (db) {
-        const snapshot = await db.ref(`groups/${id}/locations`).once('value');
-        locationMap = snapshot.val() || {};
-      }
-    } catch (fbErr) {
-      console.warn('Firebase location fetch error:', fbErr.message);
-    }
-
-    const members = membersResult.rows.map((member) => {
-      const loc = locationMap[member.user_id];
-      return {
-        ...member,
-        current_latitude:  loc?.lat  ?? null,
-        current_longitude: loc?.lng  ?? null,
-        location_updated_at: loc?.updatedAt ?? null,
-      };
-    });
+    const members = membersResult.rows;
 
     return success(res, { group: groupResult.rows[0], members });
   } catch (err) {
