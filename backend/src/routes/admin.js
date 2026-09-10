@@ -3,7 +3,7 @@ const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const {
-  getUsers, updateUserStatus, getAllReports, removeReport,
+  getUsers, updateUserStatus, updateResponderApproval, getAllReports, removeReport,
   addBusiness, getBusinesses, updateBusiness, getDashboardStats,
   getBroadcasts, createBroadcast, deleteBroadcast,
   getPartners, addPartner, updatePartnerStatus,
@@ -17,6 +17,12 @@ router.get('/dashboard', getDashboardStats);
 
 router.get('/users', getUsers);
 router.patch('/users/:id/status', updateUserStatus);
+
+// The only route that can grant emergency-responder access. Gated by
+// requireAdmin at the top of this router.
+router.patch('/users/:id/responder', [
+  body('approved').isBoolean().withMessage('approved must be true or false'),
+], validate, updateResponderApproval);
 
 router.get('/reports', getAllReports);
 router.delete('/reports/:id', removeReport);

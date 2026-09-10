@@ -36,9 +36,32 @@ const runMigrations = async () => {
       }
     }
 
-    // Seed admin account if not exists
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@caribwayz.com';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@1234';
+    // Seed admin account if not exists.
+    //
+    // There are deliberately no fallback credentials. runMigrations() executes
+    // on every boot, so a default email and password here is a live admin login
+    // on the deployed instance, published in the repository. An admin can grant
+    // emergency-responder access, which reads the live location of every person
+    // currently in an emergency, so this fails loudly rather than quietly
+    // seeding something guessable.
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    if (!adminEmail || !adminPassword) {
+      console.warn(
+        '[Migrate] ADMIN_EMAIL and ADMIN_PASSWORD are not both set - skipping admin seed. ' +
+        'Set them in the environment to create the first administrator.'
+      );
+      return;
+    }
+
+    if (adminPassword.length < 12) {
+      console.error(
+        '[Migrate] ADMIN_PASSWORD is shorter than 12 characters - refusing to seed the admin account.'
+      );
+      return;
+    }
+
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [adminEmail]);
 
     if (existing.rows.length === 0) {

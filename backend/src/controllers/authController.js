@@ -6,6 +6,9 @@ const { success, created, error, unauthorized } = require('../utils/response');
 
 const register = async (req, res) => {
   try {
+    // user_type is self-declared and grants no access. Emergency-responder
+    // authorization is users.is_responder, which only an admin can set through
+    // PATCH /api/v1/admin/users/:id/responder. See middleware/auth.js.
     const { name, email, phone, emergency_contact, user_type, password } = req.body;
 
     const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
@@ -18,7 +21,7 @@ const register = async (req, res) => {
     const result = await query(
       `INSERT INTO users (name, email, phone, emergency_contact, user_type, password_hash, auth_provider, role)
        VALUES ($1, $2, $3, $4, $5, $6, 'email', 'user')
-       RETURNING id, name, email, phone, emergency_contact, user_type, role, status, created_at`,
+       RETURNING id, name, email, phone, emergency_contact, user_type, role, status, is_responder, created_at`,
       [name, email, phone, emergency_contact, user_type || 'CaribDrivers', password_hash]
     );
 
@@ -42,7 +45,7 @@ const login = async (req, res) => {
     const { email, password } = req.body;
 
     const result = await query(
-      `SELECT id, name, email, phone, emergency_contact, user_type, password_hash, role, status, profile_image, created_at
+      `SELECT id, name, email, phone, emergency_contact, user_type, password_hash, role, status, is_responder, profile_image, created_at
        FROM users WHERE email = $1 AND auth_provider = 'email'`,
       [email]
     );

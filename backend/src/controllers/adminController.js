@@ -42,6 +42,53 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
+/**
+ * Grants or revokes emergency-responder access.
+ *
+ * This is the only way users.is_responder can be set. Registration accepts a
+ * self-declared user_type, so if that field granted access anyone could read
+ * the live location of every person currently in an emergency; the approval
+ * decision has to sit behind an admin.
+ */
+const updateResponderApproval = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { approved } = req.body;
+
+    if (typeof approved !== 'boolean') {
+      return error(res, 'approved must be true or false', 400);
+    }
+
+    const result = await query(
+      `UPDATE users
+          SET is_responder = $1,
+              responder_approved_at = CASE WHEN $1 THEN NOW() ELSE NULL END,
+              responder_approved_by = CASE WHEN $1 THEN $2::uuid ELSE NULL END,
+              updated_at = NOW()
+        WHERE id = $3
+        RETURNING id, name, email, user_type, is_responder, responder_approved_at`,
+      [approved, req.user.id, id]
+    );
+
+    if (result.rows.length === 0) return notFound(res, 'User not found');
+
+    // Responder grants change who can read live emergency locations, so the
+    // decision is written to the log with the admin who made it.
+    console.log(
+      `[Admin] ${req.user.id} set is_responder=${approved} on user ${id}`
+    );
+
+    return success(
+      res,
+      { user: result.rows[0] },
+      approved ? 'Responder access granted' : 'Responder access revoked'
+    );
+  } catch (err) {
+    console.error('Admin responder approval error:', err);
+    return error(res, 'Failed to update responder access', 500);
+  }
+};
+
 const getAllReports = async (req, res) => {
   try {
     const { limit = 100, offset = 0, status, type } = req.query;
@@ -341,7 +388,7 @@ const updatePayoutStatus = async (req, res) => {
 };
 
 module.exports = {
-  getUsers, updateUserStatus, getAllReports, removeReport,
+  getUsers, updateUserStatus, updateResponderApproval, getAllReports, removeReport,
   addBusiness, getBusinesses, updateBusiness, getDashboardStats,
   getBroadcasts, createBroadcast, deleteBroadcast,
   getPartners, addPartner, updatePartnerStatus,
