@@ -686,12 +686,127 @@ const options = {
             },
           },
         },
+        delete: {
+          tags: ['Groups'],
+          summary: 'Delete a group (creator only)',
+          description: 'Deletes the group and its memberships. Once the row is gone, broadcasts `{ "type": "group_deleted", "group_id": "<id>" }` to the group\'s WebSocket room and writes a `group` notification for every other active member. A notification failure does not fail the delete (`notified` is then -1).',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: {
+            200: {
+              description: 'Group deleted',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean' },
+                      message: { type: 'string', example: 'Group deleted' },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          delivered_live: { type: 'integer', example: 2, description: 'Other members with an open WebSocket that received the frame' },
+                          notified: { type: 'integer', example: 3, description: 'Notification rows written; -1 if that write failed' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            400: { description: 'Group id is not a valid UUID' },
+            403: { description: 'Caller is not the group creator' },
+            404: { description: 'Group not found' },
+          },
+        },
+      },
+      '/groups/{id}/sos': {
+        post: {
+          tags: ['Groups'],
+          summary: 'Raise an SOS to the group',
+          description: 'Caller must be an active member. Broadcasts to every open socket in the group room (the sender included):\n\n```json\n{ "type": "sos", "user_id": "uuid", "user_name": "John", "latitude": 10.6918, "longitude": -61.2225, "raised_at": "2026-10-03T12:00:00.000Z", "note": "optional" }\n```\n\n`raised_at` is the client value normalised to UTC, or the server receive time when the client value is missing or not an ISO-8601 date-time with an offset. Also writes an `emergency` notification (no coordinates) for every other active member. A notification failure does not fail the SOS (`notified` is then -1).',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['latitude', 'longitude'],
+                  properties: {
+                    latitude: { type: 'number', minimum: -90, maximum: 90, example: 10.6918 },
+                    longitude: { type: 'number', minimum: -180, maximum: 180, example: -61.2225 },
+                    raised_at: { type: 'string', format: 'date-time', example: '2026-10-03T12:00:00.000Z' },
+                    note: { type: 'string', maxLength: 500, description: 'Trimmed; longer values are cut to 500 characters' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'SOS sent',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean' },
+                      message: { type: 'string', example: 'SOS sent to the group' },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          delivered_live: { type: 'integer', example: 2, description: 'Other members with an open WebSocket that received the frame' },
+                          notified: { type: 'integer', example: 3, description: 'Notification rows written; -1 if that write failed' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            400: { description: 'Invalid group id, coordinates or note' },
+            403: { description: 'Not a group member' },
+          },
+        },
+      },
+      '/groups/{id}/check-in': {
+        post: {
+          tags: ['Groups'],
+          summary: 'Check in (or cancel a check-in) with the group',
+          description: 'Caller must be an active member. Broadcasts to every open socket in the group room (the sender included):\n\n```json\n{ "type": "check_in", "user_id": "uuid", "user_name": "John", "checked_in": true, "latitude": 10.6918, "longitude": -61.2225, "at": "2026-10-03T12:00:00.000Z" }\n```\n\n`latitude`/`longitude` appear only when sent. `at` follows the same normalisation and server-time fallback as SOS `raised_at`. No notification rows are written.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['checked_in'],
+                  properties: {
+                    checked_in: { type: 'boolean', example: true },
+                    latitude: { type: 'number', minimum: -90, maximum: 90, example: 10.6918, description: 'Send together with longitude, or omit both' },
+                    longitude: { type: 'number', minimum: -180, maximum: 180, example: -61.2225 },
+                    at: { type: 'string', format: 'date-time', example: '2026-10-03T12:00:00.000Z' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: 'Check-in broadcast; data.delivered_live is the number of other members reached live' },
+            400: { description: 'Invalid group id, checked_in or coordinates' },
+            403: { description: 'Not a group member' },
+          },
+        },
       },
       '/ws/groups/location': {
         get: {
           tags: ['Groups'],
           summary: 'WebSocket — real-time group member locations',
-          description: `Connect via WebSocket (not HTTP) to receive live location updates for every member in a group.\n\n**URL:** \`wss://caribwayz-api-new.onrender.com/ws/groups/location?token=<JWT>&group_id=<uuid>\`\n\n**Query params (required):**\n- \`token\` — JWT from /auth/login\n- \`group_id\` — UUID of the group to subscribe to\n\n**On connect — server sends:**\n\`\`\`json\n{ "type": "connected", "group_id": "...", "user_id": "..." }\n\`\`\`\n\n**On each member location update — server broadcasts:**\n\`\`\`json\n{\n  "type": "location_update",\n  "user_id": "uuid",\n  "user_name": "John",\n  "current_latitude": 10.6918,\n  "current_longitude": -61.2225,\n  "timestamp": 1720000000000\n}\n\`\`\`\n\nUpdates are triggered automatically whenever a member calls \`POST /groups/{id}/location\`.`,
+          description: `Connect via WebSocket (not HTTP) to receive live location updates for every member in a group.\n\n**URL:** \`wss://caribwayz-api-new.onrender.com/ws/groups/location?token=<JWT>&group_id=<uuid>\`\n\n**Query params (required):**\n- \`token\` — JWT from /auth/login\n- \`group_id\` — UUID of the group to subscribe to\n\n**On connect — server sends:**\n\`\`\`json\n{ "type": "connected", "group_id": "...", "user_id": "..." }\n\`\`\`\n\n**On each member location update — server broadcasts:**\n\`\`\`json\n{\n  "type": "location_update",\n  "user_id": "uuid",\n  "user_name": "John",\n  "current_latitude": 10.6918,\n  "current_longitude": -61.2225,\n  "timestamp": 1720000000000\n}\n\`\`\`\n\nUpdates are triggered automatically whenever a member calls \`POST /groups/{id}/location\`.\n\n**Other frames:** \`sos\` (from \`POST /groups/{id}/sos\`), \`check_in\` (from \`POST /groups/{id}/check-in\`) and \`group_deleted\` (from \`DELETE /groups/{id}\`). The server does not relay messages sent by clients.`,
           parameters: [
             { name: 'token', in: 'query', required: true, schema: { type: 'string' }, description: 'JWT bearer token' },
             { name: 'group_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Group to subscribe to' },
@@ -873,6 +988,25 @@ const options = {
       },
 
       // ── POIS ─────────────────────────────────────────────────────────────
+      '/providers': {
+        get: {
+          tags: ['POIs'],
+          summary: 'Roadside-help places near a position (Services lists)',
+          description: 'Repair, towing, tyre, locksmith, parts and fuel places from the CaribWayz roadside directory (OpenStreetMap data, ODbL). covered is false outside the Caribbean territories the directory holds; the app then asks Overpass itself. Elements use the Overpass element format.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'key', in: 'query', required: true, schema: { type: 'string', enum: ['roadside_towing', 'roadside_mechanic', 'roadside_tyres', 'roadside_locksmith', 'roadside_battery', 'roadside_fuel', 'roadside_winch', 'roadside_overheating'] } },
+            { name: 'lat', in: 'query', required: true, schema: { type: 'number' }, example: 18.0179 },
+            { name: 'lng', in: 'query', required: true, schema: { type: 'number' }, example: -76.8099 },
+            { name: 'radius', in: 'query', schema: { type: 'number', default: 5000 }, description: 'Radius in metres, 50 to 50000' },
+          ],
+          responses: {
+            200: { description: '{ covered, territory, dataset, elements[] } nearest first' },
+            400: { description: 'Unknown key or invalid coordinate' },
+            401: { description: 'No or invalid token' },
+          },
+        },
+      },
       '/pois': {
         get: {
           tags: ['POIs'],

@@ -1,6 +1,6 @@
 const { query } = require('../config/db');
 const { haversineDistance } = require('../utils/haversine');
-const { success, created, error, notFound } = require('../utils/response');
+const { success, created, error, notFound, forbidden } = require('../utils/response');
 
 const REPORT_EXPIRY_HOURS = parseInt(process.env.REPORT_EXPIRY_HOURS) || 4;
 
@@ -65,6 +65,14 @@ const getNearbyReports = async (req, res) => {
 const confirmReport = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Confirming your own report would let one driver lift it past every
+    // "verified reports only" filter.
+    const report = await query('SELECT user_id FROM reports WHERE id = $1', [id]);
+    if (report.rows.length === 0) return notFound(res, 'Report not found or expired');
+    if (String(report.rows[0].user_id).toLowerCase() === String(req.user.id).toLowerCase()) {
+      return forbidden(res, 'You cannot confirm your own report');
+    }
 
     const existing = await query(
       'SELECT id FROM report_confirmations WHERE report_id = $1 AND user_id = $2',

@@ -12,7 +12,7 @@ const ensureTable = async () => {
   await query(`
     CREATE TABLE IF NOT EXISTS incident_records (
       id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       incident_id VARCHAR(20) UNIQUE NOT NULL,
       severity VARCHAR(20) NOT NULL DEFAULT 'minor',
       type VARCHAR(50) NOT NULL DEFAULT 'accident',
@@ -26,12 +26,14 @@ const ensureTable = async () => {
       other_party_contact VARCHAR(100),
       other_party_vehicle VARCHAR(100),
       witness_info TEXT,
+      reported_by VARCHAR(255),
       image_count INTEGER DEFAULT 0,
       status VARCHAR(20) DEFAULT 'submitted',
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await query(`ALTER TABLE incident_records ADD COLUMN IF NOT EXISTS reported_by VARCHAR(255)`);
 };
 
 const getMyRecords = async (req, res) => {
@@ -78,7 +80,7 @@ const createRecord = async (req, res) => {
     const {
       severity, type, description, location_text, cause, parish,
       occurred_at, police_report_number, other_party_name,
-      other_party_contact, other_party_vehicle, witness_info,
+      other_party_contact, other_party_vehicle, witness_info, reported_by,
     } = req.body;
 
     const incidentId = generateIncidentId();
@@ -87,14 +89,15 @@ const createRecord = async (req, res) => {
       `INSERT INTO incident_records
         (user_id, incident_id, severity, type, description, location_text, cause, parish,
          occurred_at, police_report_number, other_party_name, other_party_contact,
-         other_party_vehicle, witness_info)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         other_party_vehicle, witness_info, reported_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING *`,
       [
         req.user.id, incidentId, severity || 'minor', type || 'accident',
         description, location_text, cause, parish,
         occurred_at || null, police_report_number,
         other_party_name, other_party_contact, other_party_vehicle, witness_info,
+        reported_by || null,
       ]
     );
 

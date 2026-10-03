@@ -3,6 +3,9 @@ const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 const { authenticate } = require('../middleware/auth');
 const { createGroup, joinGroup, getGroupDetails, leaveGroup, updateLocation, inviteToGroup, getGroupsByUser } = require('../controllers/groupController');
+// Validation for these lives in the controller: the mobile client expects 400
+// with a readable message, while the shared `validate` middleware answers 422.
+const { sendSos, checkIn, deleteGroup } = require('../controllers/groupEventController');
 
 router.use(authenticate);
 
@@ -22,8 +25,11 @@ router.post(
 
 router.get('/user/:user_id', getGroupsByUser);
 router.get('/:id', getGroupDetails);
+router.delete('/:id', deleteGroup);
 router.post('/:id/leave', leaveGroup);
 router.post('/:id/location', updateLocation);
+router.post('/:id/sos', sendSos);
+router.post('/:id/check-in', checkIn);
 router.post(
   '/:id/invite',
   [
