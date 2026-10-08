@@ -6,6 +6,6 @@ CREATE TABLE IF NOT EXISTS broadcasts (
   scope VARCHAR(30) NOT NULL DEFAULT 'island_wide',
   parish VARCHAR(100),
   severity VARCHAR(20) NOT NULL DEFAULT 'info',
-  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

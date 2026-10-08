@@ -13,6 +13,7 @@ import RoutesList from './pages/Routes/RoutesList';
 import RouteDetail from './pages/Routes/RouteDetail';
 import ReportsList from './pages/Reports/ReportsList';
 import EmergencyPage from './pages/Emergency/EmergencyPage';
+import EmergencyDesk from './pages/Desk/EmergencyDesk';
 import GroupsList from './pages/Groups/GroupsList';
 import GroupDetail from './pages/Groups/GroupDetail';
 import NotificationsPage from './pages/Notifications/NotificationsPage';
@@ -46,6 +47,8 @@ const App = () => (
       <Route path="/routes/:id" element={<ProtectedRoute><RouteDetail /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><ReportsList /></ProtectedRoute>} />
       <Route path="/emergency" element={<ProtectedRoute><EmergencyPage /></ProtectedRoute>} />
+      {/* Responders and admins; the API refuses anyone else and the page says so. */}
+      <Route path="/desk" element={<ProtectedRoute><EmergencyDesk /></ProtectedRoute>} />
       <Route path="/groups" element={<ProtectedRoute><GroupsList /></ProtectedRoute>} />
       <Route path="/groups/:id" element={<ProtectedRoute><GroupDetail /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />

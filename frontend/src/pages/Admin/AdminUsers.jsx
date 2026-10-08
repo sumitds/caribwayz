@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getAdminUsers, updateUserStatus } from '../../api/admin';
+import { getAdminUsers, updateUserStatus, setResponderAccess } from '../../api/admin';
 import Layout from '../../components/Layout/Layout';
 import Button from '../../components/UI/Button';
 import Badge from '../../components/UI/Badge';
@@ -21,6 +21,15 @@ const AdminUsers = () => {
       status: statusFilter !== 'all' ? statusFilter : undefined,
     }),
     select: (res) => res.data.data,
+  });
+
+  const responderMutation = useMutation({
+    mutationFn: ({ id, approved }) => setResponderAccess(id, approved),
+    onSuccess: (_, { approved }) => {
+      queryClient.invalidateQueries(['admin-users']);
+      toast.success(approved ? 'Emergency desk access granted' : 'Emergency desk access removed');
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to change desk access'),
   });
 
   const statusMutation = useMutation({
@@ -64,7 +73,7 @@ const AdminUsers = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', background: '#111' }}>
-                  {['Name', 'Email', 'Phone', 'Role', 'Status', 'Joined', 'Actions'].map((h) => (
+                  {['Name', 'Email', 'Phone', 'Role', 'Status', 'Desk access', 'Joined', 'Actions'].map((h) => (
                     <th key={h} style={{ padding: '0.85rem 1rem', textAlign: 'left', fontWeight: 700, color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -78,15 +87,30 @@ const AdminUsers = () => {
                     <td style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                         <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #CC2229, #F5A623)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.78rem', color: '#fff', flexShrink: 0 }}>
-                          {user.name?.[0]?.toUpperCase()}
+                          {user.name?.trim()?.[0]?.toUpperCase() || '?'}
                         </div>
-                        {user.name}
+                        {user.name?.trim() ? user.name : <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontStyle: 'italic' }}>Name not given</span>}
                       </div>
                     </td>
                     <td style={{ padding: '0.85rem 1rem', color: 'var(--text-muted)' }}>{user.email}</td>
                     <td style={{ padding: '0.85rem 1rem', color: 'var(--text-muted)' }}>{user.phone || '—'}</td>
                     <td style={{ padding: '0.85rem 1rem' }}><Badge status={user.role} label={user.role} /></td>
                     <td style={{ padding: '0.85rem 1rem' }}><Badge status={user.status} label={user.status} /></td>
+                    <td style={{ padding: '0.85rem 1rem', whiteSpace: 'nowrap' }}>
+                      {user.role === 'admin' ? (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Admin (always)</span>
+                      ) : user.is_responder ? (
+                        <Button size="sm" variant="secondary" loading={responderMutation.isPending && responderMutation.variables?.id === user.id}
+                          onClick={() => responderMutation.mutate({ id: user.id, approved: false })}>
+                          Remove access
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="ghost" loading={responderMutation.isPending && responderMutation.variables?.id === user.id}
+                          onClick={() => responderMutation.mutate({ id: user.id, approved: true })}>
+                          Grant access
+                        </Button>
+                      )}
+                    </td>
                     <td style={{ padding: '0.85rem 1rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}</td>
                     <td style={{ padding: '0.85rem 1rem' }}>
                       {user.status === 'active' ? (

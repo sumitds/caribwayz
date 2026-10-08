@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS sponsorships (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   business_name VARCHAR(200) NOT NULL,
   business_address TEXT,
   amount NUMERIC(10,2) NOT NULL DEFAULT 50.00,

@@ -4,6 +4,8 @@ export const getDashboardStats = () => api.get('/admin/dashboard');
 
 export const getAdminUsers = (params) => api.get('/admin/users', { params });
 export const updateUserStatus = (id, status) => api.patch(`/admin/users/${id}/status`, { status });
+// Emergency desk (responder) access. The only way it is granted; audited server-side.
+export const setResponderAccess = (id, approved) => api.patch(`/admin/users/${id}/responder`, { approved });
 
 export const getAdminReports = (params) => api.get('/admin/reports', { params });
 export const removeReport = (id) => api.delete(`/admin/reports/${id}`);

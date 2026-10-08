@@ -21,6 +21,7 @@ const userNavItems = [
 
 const adminNavItems = [
   { to: '/admin', icon: MdDashboard, label: 'Dashboard' },
+  { to: '/desk', icon: MdSos, label: 'Emergency Desk' },
   { to: '/admin/broadcast', icon: MdCampaign, label: 'Broadcast Alerts' },
   { to: '/admin/reports', icon: MdWarning, label: 'Moderate Reports' },
   { to: '/admin/users', icon: MdPeople, label: 'Manage Users' },
@@ -40,7 +41,12 @@ const Sidebar = () => {
     navigate('/login');
   };
 
-  const navItems = isAdmin ? adminNavItems : userNavItems;
+  // Responders work the emergency desk; it sits first so it is one click away.
+  const navItems = isAdmin
+    ? adminNavItems
+    : user?.is_responder
+      ? [{ to: '/desk', icon: MdSos, label: 'Emergency Desk' }, ...userNavItems]
+      : userNavItems;
 
   const linkStyle = ({ isActive }) => ({
     display: 'flex', alignItems: 'center', gap: '0.75rem',
