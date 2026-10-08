@@ -3,11 +3,16 @@ const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 const { register, login, forgotPassword, verifyOtp, logout } = require('../controllers/authController');
 const { authenticate } = require('../middleware/auth');
+const { isPlaceholderName } = require('../utils/displayName');
 
 router.post(
   '/register',
   [
-    body('name').trim().notEmpty().withMessage('Name is required'),
+    body('name')
+      .trim()
+      .notEmpty().withMessage('Name is required')
+      .isLength({ max: 255 }).withMessage('Name must be at most 255 characters')
+      .custom((name) => !isPlaceholderName(name)).withMessage('Please enter your full name'),
     body('email').isEmail().withMessage('Valid email is required'),
     body('phone').trim().notEmpty().withMessage('Phone number is required'),
     body('emergency_contact').trim().notEmpty().withMessage('Emergency contact is required'),

@@ -4,7 +4,7 @@ const { success, created, error, notFound } = require('../utils/response');
 const getUsers = async (req, res) => {
   try {
     const { limit = 50, offset = 0, status, search } = req.query;
-    let sql = `SELECT id, name, email, phone, role, status, created_at FROM users WHERE 1=1`;
+    let sql = `SELECT id, name, email, phone, role, status, is_responder, created_at FROM users WHERE 1=1`;
     const params = [];
 
     if (status) { params.push(status); sql += ` AND status = $${params.length}`; }

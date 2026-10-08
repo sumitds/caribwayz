@@ -7,6 +7,8 @@ const {
   listEmergencies,
   getEmergencyStatus,
   resolveEmergency,
+  acknowledgeEmergency,
+  releaseEmergency,
   EMERGENCY_TYPES,
 } = require('../controllers/emergencyController');
 
@@ -38,5 +40,10 @@ router.get('/', requireResponder, listEmergencies);
 
 router.get('/:id', getEmergencyStatus);
 router.post('/:id/resolve', resolveEmergency);
+
+// The emergency desk: an operator takes an alert so no two answer the same
+// SOS, and can hand it back. Responders and admins only.
+router.post('/:id/acknowledge', requireResponder, acknowledgeEmergency);
+router.post('/:id/release', requireResponder, releaseEmergency);
 
 module.exports = router;

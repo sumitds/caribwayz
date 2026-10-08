@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const ws = require('../services/wsService');
 const { success, error, notFound, forbidden } = require('../utils/response');
+const { displayName } = require('../utils/displayName');
 
 /**
  * Group events that other members must see: SOS, check-in and deletion.
@@ -122,7 +123,10 @@ const buildGroupEventHandlers = ({ query, broadcastToGroup, isMemberConnected, n
         WHERE gm.group_id = $1 AND gm.user_id = $2 AND gm.status = 'active'`,
       [groupId, userId]
     );
-    return result.rows[0] || null;
+    const row = result.rows[0];
+    // Notification rows outlive the frame, so the stored copy must never read
+    // "SOS from default" or "SOS from " for an account without a real name.
+    return row ? { ...row, user_name: displayName(row.user_name) } : null;
   };
 
   /**

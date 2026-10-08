@@ -3,6 +3,7 @@ const { success, created, error, notFound, forbidden } = require('../utils/respo
 const { getRealtimeDB } = require('../config/firebase');
 const { sendGroupInvite } = require('../services/emailService');
 const { broadcastLocation } = require('../services/wsService');
+const { displayName } = require('../utils/displayName');
 
 const generateJoinCode = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -146,8 +147,13 @@ const updateLocation = async (req, res) => {
     const { id } = req.params;
     const { latitude, longitude } = req.body;
 
+    // The token carries only { id, email, role }, so the sender's name for the
+    // live frame is read alongside the membership check.
     const member = await query(
-      `SELECT id FROM group_members WHERE group_id = $1 AND user_id = $2 AND status = 'active'`,
+      `SELECT gm.id, u.name AS user_name
+         FROM group_members gm
+         JOIN users u ON u.id = gm.user_id
+        WHERE gm.group_id = $1 AND gm.user_id = $2 AND gm.status = 'active'`,
       [id, req.user.id]
     );
     if (member.rows.length === 0) return forbidden(res, 'Not a member of this group');
@@ -162,7 +168,7 @@ const updateLocation = async (req, res) => {
     }
 
     // Broadcast to all WebSocket clients in this group room
-    broadcastLocation(id, req.user.id, req.user.name, latitude, longitude);
+    broadcastLocation(id, req.user.id, displayName(member.rows[0].user_name), latitude, longitude);
 
     return success(res, {}, 'Location updated');
   } catch (err) {
@@ -174,6 +180,12 @@ const updateLocation = async (req, res) => {
 const getGroupsByUser = async (req, res) => {
   try {
     const { user_id } = req.params;
+
+    // Rows include each group's join_code, which admits anyone to the group's
+    // live member locations, so only the user themselves or an admin may list.
+    if (user_id !== req.user.id && req.user.role !== 'admin') {
+      return forbidden(res, 'You can only list your own groups');
+    }
 
     const result = await query(
       `SELECT g.*, gm.joined_at, gm.status AS member_status,
@@ -204,7 +216,10 @@ const inviteToGroup = async (req, res) => {
     const group = groupResult.rows[0];
 
     const member = await query(
-      `SELECT id FROM group_members WHERE group_id = $1 AND user_id = $2 AND status = 'active'`,
+      `SELECT gm.id, u.name AS user_name
+         FROM group_members gm
+         JOIN users u ON u.id = gm.user_id
+        WHERE gm.group_id = $1 AND gm.user_id = $2 AND gm.status = 'active'`,
       [id, req.user.id]
     );
     if (member.rows.length === 0) return forbidden(res, 'Only group members can send invites');
@@ -213,7 +228,7 @@ const inviteToGroup = async (req, res) => {
       toEmails: email,
       groupName: group.group_name,
       joinCode: group.join_code,
-      inviterName: req.user.name,
+      inviterName: displayName(member.rows[0].user_name),
     });
 
     return success(res, { invited: email.length }, `Invitation sent to ${email.length} recipient(s)`);
