@@ -252,6 +252,24 @@ describe('notify: push', () => {
     assert.deepEqual(db.of('prune')[0].params, [['gone', 'junk']]);
   });
 
+  test('the failure log names each FCM error code with a count, never a token', async (t) => {
+    const logged = captureConsole(t);
+    const messaging = makeMessaging({
+      errorFor: {
+        'tok-secret-1': 'messaging/mismatched-credential',
+        'tok-secret-2': 'messaging/mismatched-credential',
+        'tok-secret-3': 'messaging/server-unavailable',
+      },
+    });
+    const { service } = build({ db: makeDb({ tokens: ['ok', 'tok-secret-1', 'tok-secret-2', 'tok-secret-3'] }), messaging });
+    assert.deepEqual(await service.sendPush([A], PAYLOAD), { sent: 1, failed: 3, pruned: 0 });
+    const line = logged.find((l) => l.includes('3 failed'));
+    assert.ok(line, 'a failure summary is logged');
+    assert.ok(line.includes('messaging/mismatched-credential x2'), line);
+    assert.ok(line.includes('messaging/server-unavailable x1'), line);
+    assert.ok(!logged.some((l) => l.includes('tok-secret')), 'tokens never reach the log');
+  });
+
   test('a batch that throws counts as failed, prunes nothing and does not fail notify', async (t) => {
     const logged = captureConsole(t);
     const messaging = makeMessaging({ throwBatch: true });
