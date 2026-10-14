@@ -1,5 +1,96 @@
 const swaggerJsdoc = require('swagger-jsdoc');
 
+const errorBody = (example) => ({
+  'application/json': {
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: false },
+        message: { type: 'string', example },
+      },
+    },
+  },
+});
+
+const codedErrorBody = (example, code) => ({
+  'application/json': {
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: false },
+        message: { type: 'string', example },
+        data: { type: 'object', properties: { code: { type: 'string', example: code } } },
+      },
+    },
+  },
+});
+
+/** The three Firebase sign-in routes share one contract. */
+const firebaseSignInDoc = (label, signInProvider) => ({
+  tags: ['Auth'],
+  summary: `Sign in with ${label} through Firebase`,
+  description:
+    `Send the Firebase ID token the app got after signing in with ${label}. The server verifies it and requires ` +
+    `firebase.sign_in_provider to be "${signInProvider}". Email, name and photo come from the verified token, never ` +
+    'from the body. A returning user is found by Firebase uid. A sign-in is never attached to an existing account ' +
+    'by email: an email that is already registered is a 409 EMAIL_IN_USE. A new account is created on first sign-in. Rate limited to 30 requests per IP per ' +
+    '15 minutes across the three sign-in routes.',
+  requestBody: {
+    required: true,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          required: ['idToken'],
+          properties: {
+            idToken: { type: 'string', description: 'Firebase ID token (FirebaseUser.getIdToken())' },
+            name: {
+              type: 'string',
+              description: 'Optional. Used only when creating an account and the token carries no name. Required for a new phone account (see 422 NAME_REQUIRED).',
+              example: 'Jane Brown',
+            },
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Signed in',
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', example: true },
+              data: {
+                type: 'object',
+                properties: {
+                  token: { type: 'string', example: 'eyJhbGci...' },
+                  user: { $ref: '#/components/schemas/User' },
+                  is_new_user: { type: 'boolean', example: false },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    401: { description: 'Bad, expired or wrong-provider token', content: errorBody('Sign-in could not be verified') },
+    403: { description: 'Account suspended', content: errorBody('Your account has been suspended') },
+    409: {
+      description: 'The email belongs to an account this sign-in cannot attach to',
+      content: codedErrorBody('This email is already registered. Sign in the way you first signed up.', 'EMAIL_IN_USE'),
+    },
+    422: {
+      description: 'Validation error, or (phone only) a new account needs a name: retry with "name"',
+      content: codedErrorBody('Please enter your name to finish signing up', 'NAME_REQUIRED'),
+    },
+    429: { description: 'Too many requests from this IP', content: errorBody('Too many sign-in attempts. Please wait a few minutes and try again.') },
+    503: { description: 'Firebase is not configured on the server', content: errorBody("This sign-in method isn't available right now") },
+  },
+});
+
 const options = {
   definition: {
     openapi: '3.0.0',
@@ -35,7 +126,7 @@ const options = {
           properties: {
             id: { type: 'string', format: 'uuid' },
             name: { type: 'string', example: 'John Doe' },
-            email: { type: 'string', example: 'john@example.com' },
+            email: { type: 'string', example: 'john@example.com', nullable: true, description: 'Null for an account created by phone sign-in' },
             phone: { type: 'string', example: '+18681234567', nullable: true },
             profile_image: { type: 'string', nullable: true },
             role: { type: 'string', enum: ['user', 'admin'] },
@@ -103,14 +194,14 @@ const options = {
     },
     tags: [
       { name: 'Health', description: 'API status' },
-      { name: 'Auth', description: 'Register, login, password reset' },
+      { name: 'Auth', description: 'Register, login, Google/Facebook/phone sign-in, password reset' },
       { name: 'User', description: 'Profile and preferences' },
       { name: 'Routes', description: 'Navigation route planning' },
       { name: 'Groups', description: 'Shared navigation groups with live locations' },
       { name: 'Reports', description: 'Community safety reports' },
       { name: 'POIs', description: 'Points of interest' },
-      { name: 'Emergency', description: 'Emergency alerts with FCM broadcast' },
-      { name: 'Notifications', description: 'In-app notifications' },
+      { name: 'Emergency', description: 'Emergency alerts, delivered to responders as notifications and push' },
+      { name: 'Notifications', description: 'In-app notifications. Every notification is also pushed (FCM) to the recipient\'s registered devices when its category is switched on in /user/preferences. Push data: { type, reference_id, category }, all strings.' },
       { name: 'Admin', description: 'Admin-only management endpoints' },
     ],
     paths: {
@@ -233,11 +324,14 @@ const options = {
           },
         },
       },
+      '/auth/google-login': { post: firebaseSignInDoc('Google', 'google.com') },
+      '/auth/facebook-login': { post: firebaseSignInDoc('Facebook', 'facebook.com') },
+      '/auth/phone-login': { post: firebaseSignInDoc('phone number', 'phone') },
       '/auth/forgot-password': {
         post: {
           tags: ['Auth'],
-          summary: 'Request password reset OTP',
-          description: 'Generates a 6-digit OTP valid for 15 minutes. OTP is returned in the response until SMS/email service is integrated.',
+          summary: 'Email a password reset code',
+          description: 'Emails a 6-digit code, valid for 15 minutes, to an email+password account. The code is never returned in the response, and the response is the same whether or not the address is registered. Rate limited to 5 requests per IP per 15 minutes.',
           requestBody: {
             required: true,
             content: {
@@ -252,31 +346,31 @@ const options = {
           },
           responses: {
             200: {
-              description: 'OTP generated',
+              description: 'Accepted. Same response for registered and unregistered addresses.',
               content: {
                 'application/json': {
                   schema: {
                     type: 'object',
                     properties: {
                       success: { type: 'boolean', example: true },
-                      data: {
-                        type: 'object',
-                        properties: {
-                          otp: { type: 'string', example: '482910', description: 'Use this OTP in /auth/otp-verify' },
-                        },
-                      },
+                      message: { type: 'string', example: 'If this email is registered, a reset code has been sent to it. It expires in 15 minutes.' },
+                      data: { type: 'object', example: {} },
                     },
                   },
                 },
               },
             },
+            422: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            429: { description: 'Too many requests from this IP', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            503: { description: "Email is not configured on the server: \"Password reset by email isn't available right now. Please contact support.\"", content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           },
         },
       },
       '/auth/otp-verify': {
         post: {
           tags: ['Auth'],
-          summary: 'Verify OTP and reset password',
+          summary: 'Verify the emailed code and set a new password',
+          description: 'Five wrong codes void the code; request a new one. new_password follows the /auth/register rules. Rate limited to 10 requests per IP per 15 minutes.',
           requestBody: {
             required: true,
             content: {
@@ -286,8 +380,8 @@ const options = {
                   required: ['email', 'otp', 'new_password'],
                   properties: {
                     email: { type: 'string', example: 'john@example.com' },
-                    otp: { type: 'string', example: '123456' },
-                    new_password: { type: 'string', example: 'NewPassword123' },
+                    otp: { type: 'string', example: '123456', description: 'The 6-digit code from the email' },
+                    new_password: { type: 'string', example: 'NewPassword@1', description: 'Min 6 chars, 1 uppercase, 1 number, 1 special symbol' },
                   },
                 },
               },
@@ -295,7 +389,9 @@ const options = {
           },
           responses: {
             200: { description: 'Password reset successfully' },
-            400: { description: 'Invalid or expired OTP', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            400: { description: 'Invalid, expired, used or voided code; or a wrong code, with the attempts left', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            422: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            429: { description: 'Too many requests from this IP', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           },
         },
       },
@@ -395,13 +491,23 @@ const options = {
                       data: {
                         type: 'object',
                         properties: {
-                          alert_police: { type: 'boolean' },
-                          alert_construction: { type: 'boolean' },
-                          alert_hazards: { type: 'boolean' },
-                          alert_traffic: { type: 'boolean' },
-                          alert_business: { type: 'boolean' },
-                          alert_tourism: { type: 'boolean' },
-                          priority_level: { type: 'string', enum: ['low', 'medium', 'high'] },
+                          preferences: {
+                            type: 'object',
+                            properties: {
+                              alert_police: { type: 'boolean' },
+                              alert_construction: { type: 'boolean' },
+                              alert_hazards: { type: 'boolean' },
+                              alert_traffic: { type: 'boolean' },
+                              alert_business: { type: 'boolean' },
+                              alert_tourism: { type: 'boolean' },
+                              priority_level: { type: 'string', enum: ['critical', 'high', 'low'] },
+                              push_emergency: { type: 'boolean', description: 'Push for emergencies: responder alerts, group SOS, safety broadcasts. Default true.' },
+                              push_group: { type: 'boolean', description: 'Push for group check-ins and deletions. Default true.' },
+                              push_reports: { type: 'boolean', description: 'Push when someone confirms your report. Default true.' },
+                              push_app_updates: { type: 'boolean', description: 'Push for informational admin broadcasts. Default true.' },
+                              push_promotions: { type: 'boolean', description: 'Push for promotional broadcasts. Default false (opt-in).' },
+                            },
+                          },
                         },
                       },
                     },
@@ -414,6 +520,7 @@ const options = {
         put: {
           tags: ['User'],
           summary: 'Update notification preferences',
+          description: 'Every field is optional; an omitted field keeps its stored value, so one switch can be changed on its own. A push_* field that is sent must be a JSON boolean.',
           security: [{ bearerAuth: [] }],
           requestBody: {
             content: {
@@ -427,13 +534,72 @@ const options = {
                     alert_traffic: { type: 'boolean' },
                     alert_business: { type: 'boolean' },
                     alert_tourism: { type: 'boolean' },
-                    priority_level: { type: 'string', enum: ['low', 'medium', 'high'] },
+                    priority_level: { type: 'string', enum: ['critical', 'high', 'low'] },
+                    push_emergency: { type: 'boolean', description: 'Push for emergencies: responder alerts, group SOS, safety broadcasts. Default true.' },
+                    push_group: { type: 'boolean', description: 'Push for group check-ins and deletions. Default true.' },
+                    push_reports: { type: 'boolean', description: 'Push when someone confirms your report. Default true.' },
+                    push_app_updates: { type: 'boolean', description: 'Push for informational admin broadcasts. Default true.' },
+                    push_promotions: { type: 'boolean', description: 'Push for promotional broadcasts. Default false (opt-in).' },
                   },
                 },
               },
             },
           },
-          responses: { 200: { description: 'Updated preferences' } },
+          responses: {
+            200: { description: 'Updated preferences, in data.preferences' },
+            404: { description: 'The account has no preferences row' },
+            422: { description: 'A push_* field is not a boolean' },
+          },
+        },
+      },
+      '/user/device-token': {
+        post: {
+          tags: ['User'],
+          summary: 'Register this phone for push notifications',
+          description: 'Upserts the FCM registration token. A token already registered to another account is moved to the caller (one app install belongs to whoever is signed in on it). Only the newest 10 devices of an account are kept. Rate limited per account.',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['token', 'platform'],
+                  properties: {
+                    token: { type: 'string', minLength: 1, maxLength: 4096, description: 'FCM registration token (trimmed)' },
+                    platform: { type: 'string', enum: ['android', 'ios'] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: 'Registered; data.device_token = { id, token, platform, created_at, updated_at }' },
+            422: { description: 'Missing or over-long token, or unknown platform' },
+            429: { description: 'Too many registrations from this account' },
+          },
+        },
+        delete: {
+          tags: ['User'],
+          summary: 'Unregister this phone (on sign-out)',
+          description: 'Removes the token only if it is registered to the caller. A token that is not registered to the caller is not an error: data.removed is then false.',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['token'],
+                  properties: { token: { type: 'string', minLength: 1, maxLength: 4096 } },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: 'data.removed tells whether a registration was removed' },
+            422: { description: 'Missing token' },
+          },
         },
       },
 
@@ -775,7 +941,7 @@ const options = {
         post: {
           tags: ['Groups'],
           summary: 'Check in (or cancel a check-in) with the group',
-          description: 'Caller must be an active member. Broadcasts to every open socket in the group room (the sender included):\n\n```json\n{ "type": "check_in", "user_id": "uuid", "user_name": "John", "checked_in": true, "latitude": 10.6918, "longitude": -61.2225, "at": "2026-10-03T12:00:00.000Z" }\n```\n\n`latitude`/`longitude` appear only when sent. `at` follows the same normalisation and server-time fallback as SOS `raised_at`. No notification rows are written.',
+          description: 'Caller must be an active member. Broadcasts to every open socket in the group room (the sender included):\n\n```json\n{ "type": "check_in", "user_id": "uuid", "user_name": "John", "checked_in": true, "latitude": 10.6918, "longitude": -61.2225, "at": "2026-10-03T12:00:00.000Z" }\n```\n\n`latitude`/`longitude` appear only when sent. `at` follows the same normalisation and server-time fallback as SOS `raised_at`. A check-in (checked_in true) also writes a `group` notification for every other active member, pushed under the `group` category; a cancellation is live-only.',
           security: [{ bearerAuth: [] }],
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
           requestBody: {
@@ -977,7 +1143,7 @@ const options = {
         post: {
           tags: ['Reports'],
           summary: 'Confirm a report (upvote)',
-          description: 'Each user can confirm a report once. Increments confirmed_count.',
+          description: 'Each user can confirm a report once, and never their own. Increments confirmed_count and notifies the reporter (a `report` notification, pushed under the `reports` category). A notification failure does not fail the confirmation.',
           security: [{ bearerAuth: [] }],
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
           responses: {
@@ -1060,7 +1226,7 @@ const options = {
         post: {
           tags: ['Emergency'],
           summary: 'Trigger an emergency alert',
-          description: 'Creates an emergency record and sends FCM push notification to all users subscribed to the `emergency_alerts` topic.',
+          description: 'Creates an emergency record and notifies every approved responder and admin: an `emergency` notification row each, and an FCM push (channel `caribwayz_alerts`) to their registered devices when they have push_emergency on. `data.responders_notified` is the number of responders notified, or -1 when delivery failed.',
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -1080,7 +1246,7 @@ const options = {
             },
           },
           responses: {
-            201: { description: 'Emergency alert triggered and broadcast via FCM' },
+            201: { description: 'Emergency alert triggered; data = { alert, responders_notified }' },
           },
         },
       },
@@ -1264,6 +1430,43 @@ const options = {
           security: [{ bearerAuth: [] }],
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
           responses: { 200: { description: 'Report removed (status set to removed)' } },
+        },
+      },
+      '/admin/broadcasts': {
+        post: {
+          tags: ['Admin'],
+          summary: 'Send a broadcast to every active account',
+          description: 'Saves the broadcast and sends every active account a `system` notification, pushed under a category chosen by type: disaster, hazard, emergency and road_closure use `emergency`; info uses `app_updates`; promotion uses `promotions` (opt-in). Accounts carry no parish, so a parish broadcast goes to everyone with the parish prefixed to the title.',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['title', 'message', 'type'],
+                  properties: {
+                    title: { type: 'string', maxLength: 200 },
+                    message: { type: 'string' },
+                    type: { type: 'string', enum: ['disaster', 'hazard', 'emergency', 'road_closure', 'info', 'promotion'] },
+                    scope: { type: 'string', example: 'island_wide', description: 'island_wide (default) or parish' },
+                    parish: { type: 'string' },
+                    severity: { type: 'string', example: 'warning', description: 'info (default), warning or critical' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: { description: 'data = { broadcast, notified }; notified is the number of accounts notified, or -1 when delivery failed (the broadcast is saved either way)' },
+            422: { description: 'Missing title or message, or unknown type' },
+          },
+        },
+        get: {
+          tags: ['Admin'],
+          summary: 'List the last 100 broadcasts',
+          security: [{ bearerAuth: [] }],
+          responses: { 200: { description: 'data.broadcasts' } },
         },
       },
       '/admin/businesses': {

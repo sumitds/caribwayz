@@ -2,6 +2,7 @@ const router = require('express').Router();
 const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 const { authenticate } = require('../middleware/auth');
+const { perUser } = require('../middleware/rateLimit');
 const { createGroup, joinGroup, getGroupDetails, leaveGroup, updateLocation, inviteToGroup, getGroupsByUser } = require('../controllers/groupController');
 // Validation for these lives in the controller: the mobile client expects 400
 // with a readable message, while the shared `validate` middleware answers 422.
@@ -28,8 +29,13 @@ router.get('/:id', getGroupDetails);
 router.delete('/:id', deleteGroup);
 router.post('/:id/leave', leaveGroup);
 router.post('/:id/location', updateLocation);
-router.post('/:id/sos', sendSos);
-router.post('/:id/check-in', checkIn);
+// An SOS or check-in pushes to every member's phone, so each member gets a
+// budget per group: generous for real use, but no loop of alerts.
+const GROUP_EVENT_LIMIT = 10;
+const GROUP_EVENT_WINDOW_MS = 10 * 60 * 1000;
+const perGroupMember = (message) => perUser(GROUP_EVENT_LIMIT, GROUP_EVENT_WINDOW_MS, message, (req) => `group:${req.params.id}`);
+router.post('/:id/sos', perGroupMember('Too many SOS alerts to this group. Please wait a few minutes before sending another.'), sendSos);
+router.post('/:id/check-in', perGroupMember('Too many check-ins to this group. Please wait a few minutes before checking in again.'), checkIn);
 router.post(
   '/:id/invite',
   [

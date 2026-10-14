@@ -14,7 +14,7 @@ const initFirebase = () => {
   } = process.env;
 
   if (!FIREBASE_PROJECT_ID || !FIREBASE_PRIVATE_KEY || !FIREBASE_CLIENT_EMAIL) {
-    console.warn('[Firebase] Credentials not set — Realtime DB, FCM and Storage are disabled.');
+    console.warn('[Firebase] Credentials not set — Realtime DB, FCM, Storage and social/phone sign-in are disabled.');
     return false;
   }
 
@@ -49,9 +49,15 @@ const getMessaging = () => {
   return admin.messaging();
 };
 
+/** Firebase Auth, for verifying ID tokens from the app. Null when not initialised. */
+const getAuth = () => {
+  if (!initialized) return null;
+  return admin.auth();
+};
+
 const getStorage = () => {
   if (!initialized) return null;
   return admin.storage().bucket();
 };
 
-module.exports = { initFirebase, getRealtimeDB, getMessaging, getStorage };
+module.exports = { initFirebase, getRealtimeDB, getMessaging, getAuth, getStorage };

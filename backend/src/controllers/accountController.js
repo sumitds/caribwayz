@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 const ws = require('../services/wsService');
 const firebase = require('../config/firebase');
+const { buildNotificationService } = require('../services/notificationService');
 const { success, error, notFound, forbidden } = require('../utils/response');
 
 /**
@@ -69,6 +70,8 @@ const ownedStoragePath = (url, bucketName) => {
  * @param {() => any} deps.getRealtimeDB firebase-admin database, or null when not configured
  * @param {(plain: string, hash: string) => Promise<boolean>} [deps.comparePassword]
  * @param {() => Date} [deps.now]
+ * @param {{insertNotifications: Function, sendPush: Function}} [deps.notifications]
+ *   notificationService; by default built on [deps.query]
  */
 const buildAccountHandlers = ({
   query,
@@ -78,6 +81,7 @@ const buildAccountHandlers = ({
   getRealtimeDB,
   comparePassword = bcrypt.compare,
   now = () => new Date(),
+  notifications = buildNotificationService({ query, getMessaging: firebase.getMessaging }),
 }) => {
   const exportData = async (req, res) => {
     try {
@@ -109,6 +113,15 @@ const buildAccountHandlers = ({
       return error(res, 'Failed to export your data', 500);
     }
   };
+
+  /** The notice members of a deleted group get, as when a creator deletes it. */
+  const groupDeletedNotice = (group) => ({
+    type: 'group',
+    category: 'group',
+    title: 'Group deleted',
+    message: `${group.group_name} was deleted by its creator`,
+    reference_id: group.id,
+  });
 
   /** Best-effort clean-up of copies outside Postgres. Never throws. */
   const removeExternalCopies = async (userId, profileImage, memberGroupIds) => {
@@ -192,13 +205,14 @@ const buildAccountHandlers = ({
           [userId]
         )).rows.map((r) => r.group_id);
 
+        // The rows are written inside the transaction so a delete that rolls
+        // back leaves no notice behind; the push goes only after the commit.
         for (const group of ownedGroups) {
           if (group.others.length === 0) continue;
-          await client.query(
-            `INSERT INTO notifications (user_id, title, message, type, reference_id)
-             SELECT recipient, $1, $2, 'group', $3
-               FROM unnest($4::uuid[]) AS recipient`,
-            ['Group deleted', `${group.group_name} was deleted by its creator`, group.id, group.others]
+          await notifications.insertNotifications(
+            (text, params) => client.query(text, params),
+            group.others,
+            groupDeletedNotice(group)
           );
         }
 
@@ -218,6 +232,7 @@ const buildAccountHandlers = ({
       // Only after the commit, so no member drops a group whose delete failed.
       for (const group of ownedGroups) {
         broadcastToGroup(group.id, { type: 'group_deleted', group_id: group.id, deleted_by: userId });
+        if (group.others.length > 0) await notifications.sendPush(group.others, groupDeletedNotice(group));
       }
       await removeExternalCopies(userId, user.profile_image, memberGroupIds);
 

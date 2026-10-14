@@ -1,6 +1,7 @@
 const { query } = require('../config/db');
 const { haversineDistance } = require('../utils/haversine');
 const { success, created, error, notFound, forbidden } = require('../utils/response');
+const { notify } = require('../services/notificationService');
 
 const REPORT_EXPIRY_HOURS = parseInt(process.env.REPORT_EXPIRY_HOURS) || 4;
 
@@ -96,7 +97,19 @@ const confirmReport = async (req, res) => {
 
     if (result.rows.length === 0) return notFound(res, 'Report not found or expired');
 
-    return success(res, { report: result.rows[0] }, 'Report confirmed');
+    // Tell the reporter someone on the road saw it too. Own reports were
+    // refused above, so this never thanks people for confirming themselves.
+    // notify() never throws: a failed notice does not undo the confirmation.
+    const confirmed = result.rows[0];
+    await notify([confirmed.user_id], {
+      type: 'report',
+      category: 'reports',
+      title: 'Your report was confirmed',
+      message: `Another driver confirmed your ${String(confirmed.type).replace(/_/g, ' ')} report. Thanks for keeping the road safe.`,
+      reference_id: confirmed.id,
+    });
+
+    return success(res, { report: confirmed }, 'Report confirmed');
   } catch (err) {
     console.error('Confirm report error:', err);
     return error(res, 'Failed to confirm report', 500);

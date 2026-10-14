@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 const { success, created, error, notFound } = require('../utils/response');
+const { notify } = require('../services/notificationService');
 
 const getUsers = async (req, res) => {
   try {
@@ -210,6 +211,54 @@ const getDashboardStats = async (req, res) => {
 };
 
 // Broadcasts
+
+/**
+ * Broadcast type -> the push category it is delivered under, which decides the
+ * preference switch that gates it and the Android channel it rings on.
+ *
+ * Disaster, hazard, emergency and road-closure notices are safety alerts and go
+ * out under "emergency", so turning off "App updates" can never silence a
+ * hurricane warning. "info" is a general notice from the CaribWayz team.
+ * "promotion" is the one kind a person must opt in to; the admin panel does not
+ * offer it yet.
+ */
+const BROADCAST_CATEGORIES = Object.freeze({
+  disaster: 'emergency',
+  hazard: 'emergency',
+  emergency: 'emergency',
+  road_closure: 'emergency',
+  info: 'app_updates',
+  promotion: 'promotions',
+});
+const BROADCAST_TYPES = Object.keys(BROADCAST_CATEGORIES);
+
+/**
+ * Sends a broadcast to every active account.
+ *
+ * Accounts carry no home parish, so a parish broadcast cannot be targeted; it
+ * goes to everyone with the parish named first, so a driver elsewhere can tell
+ * at a glance it is not about them. Never throws; returns notify()'s count.
+ */
+const deliverBroadcast = async (broadcast) => {
+  let recipients;
+  try {
+    recipients = (await query(`SELECT id FROM users WHERE status = 'active'`)).rows.map((row) => row.id);
+  } catch (err) {
+    console.error(`Broadcast ${broadcast.id}: reading recipients failed:`, err.message);
+    return -1;
+  }
+  const title = broadcast.scope === 'parish' && broadcast.parish
+    ? `${broadcast.parish}: ${broadcast.title}`
+    : broadcast.title;
+  return notify(recipients, {
+    type: 'system',
+    category: BROADCAST_CATEGORIES[broadcast.type],
+    title,
+    message: broadcast.message,
+    data: { broadcast_type: broadcast.type, severity: broadcast.severity },
+  });
+};
+
 const getBroadcasts = async (req, res) => {
   try {
     const result = await query(
@@ -232,7 +281,11 @@ const createBroadcast = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [title, message, type, scope || 'island_wide', parish || null, severity || 'info', req.user.id]
     );
-    return created(res, { broadcast: result.rows[0] }, 'Alert broadcast sent');
+    const broadcast = result.rows[0];
+    // notified is the number of accounts that got it in their list, or -1 when
+    // delivery failed; the broadcast itself is saved either way.
+    const notified = await deliverBroadcast(broadcast);
+    return created(res, { broadcast, notified }, 'Alert broadcast sent');
   } catch (err) {
     console.error('Create broadcast error:', err);
     return error(res, 'Failed to send broadcast', 500);
@@ -394,4 +447,5 @@ module.exports = {
   getPartners, addPartner, updatePartnerStatus,
   getSponsorships, updateSponsorshipStatus,
   getPayouts, updatePayoutStatus,
+  BROADCAST_CATEGORIES, BROADCAST_TYPES,
 };

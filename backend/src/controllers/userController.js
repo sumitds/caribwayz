@@ -46,7 +46,13 @@ const updateProfile = async (req, res) => {
       }
 
       const userResult = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
-      const valid = await bcrypt.compare(current_password, userResult.rows[0].password_hash);
+      const stored = userResult.rows[0];
+      if (!stored) return notFound(res, 'User not found');
+      // Google, Facebook and phone accounts are created without a password.
+      if (!stored.password_hash) {
+        return error(res, 'This account signs in with Google, Facebook or phone and has no password to change', 400);
+      }
+      const valid = await bcrypt.compare(current_password, stored.password_hash);
       if (!valid) {
         return error(res, 'Current password is incorrect', 400);
       }
@@ -93,8 +99,11 @@ const updatePreferences = async (req, res) => {
     const {
       alert_police, alert_construction, alert_hazards,
       alert_traffic, alert_business, alert_tourism, priority_level,
+      push_emergency, push_group, push_reports, push_app_updates, push_promotions,
     } = req.body;
 
+    // Every field is optional: an omitted one keeps its stored value, so the
+    // app can flip one switch without re-sending the rest.
     const result = await query(
       `UPDATE user_preferences
        SET alert_police = COALESCE($1, alert_police),
@@ -104,12 +113,20 @@ const updatePreferences = async (req, res) => {
            alert_business = COALESCE($5, alert_business),
            alert_tourism = COALESCE($6, alert_tourism),
            priority_level = COALESCE($7, priority_level),
+           push_emergency = COALESCE($9, push_emergency),
+           push_group = COALESCE($10, push_group),
+           push_reports = COALESCE($11, push_reports),
+           push_app_updates = COALESCE($12, push_app_updates),
+           push_promotions = COALESCE($13, push_promotions),
            updated_at = NOW()
        WHERE user_id = $8
        RETURNING *`,
       [alert_police, alert_construction, alert_hazards, alert_traffic,
-       alert_business, alert_tourism, priority_level, req.user.id]
+       alert_business, alert_tourism, priority_level, req.user.id,
+       push_emergency, push_group, push_reports, push_app_updates, push_promotions]
     );
+    // Without this the app would be told its switch was saved when nothing was.
+    if (result.rows.length === 0) return notFound(res, 'Preferences not found');
     return success(res, { preferences: result.rows[0] }, 'Preferences updated');
   } catch (err) {
     console.error('Update preferences error:', err);
@@ -117,4 +134,87 @@ const updatePreferences = async (req, res) => {
   }
 };
 
-module.exports = { getProfile, updateProfile, getPreferences, updatePreferences };
+/**
+ * Only the newest registrations of an account are kept, so reinstalls do not
+ * pile up dead tokens that every notification would be sent to.
+ */
+const MAX_DEVICES_PER_USER = 10;
+
+/**
+ * Registers this phone for push. A token belongs to one app install, so when it
+ * is already registered to another account (someone else signed in on this
+ * phone before) it moves to the caller: the previous account must stop getting
+ * pushes on a phone it is no longer signed in on.
+ */
+const registerDeviceToken = async (req, res) => {
+  try {
+    const { token, platform } = req.body;
+    // previous_owner is read from the snapshot before the upsert, so it is the
+    // account the token belonged to until now (null for a new token).
+    const result = await query(
+      `WITH previous AS (SELECT user_id FROM device_tokens WHERE token = $2)
+       INSERT INTO device_tokens (user_id, token, platform)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (token) DO UPDATE
+         SET user_id = EXCLUDED.user_id,
+             platform = EXCLUDED.platform,
+             updated_at = NOW()
+       RETURNING id, token, platform, created_at, updated_at,
+                 (SELECT user_id FROM previous) AS previous_owner`,
+      [req.user.id, token, platform]
+    );
+    const { previous_owner: previousOwner, ...deviceToken } = result.rows[0];
+    // Nothing proves the caller holds this install, so a move between accounts
+    // is logged with both ids: a responder who stops getting pushes can be
+    // traced to the account that took their token.
+    if (previousOwner && previousOwner !== req.user.id) {
+      console.warn(`Device token ${deviceToken.id} moved from user ${previousOwner} to user ${req.user.id}`);
+    }
+
+    await query(
+      `DELETE FROM device_tokens
+        WHERE user_id = $1
+          AND id NOT IN (
+            SELECT id FROM device_tokens
+             WHERE user_id = $1
+             ORDER BY updated_at DESC, created_at DESC
+             LIMIT $2
+          )`,
+      [req.user.id, MAX_DEVICES_PER_USER]
+    );
+
+    return success(res, { device_token: deviceToken }, 'Device registered for notifications');
+  } catch (err) {
+    console.error(`Register device token error (user ${req.user && req.user.id}):`, err);
+    return error(res, 'Failed to register this device for notifications', 500);
+  }
+};
+
+/**
+ * Unregisters this phone, on sign-out. Only the caller's own token is removed,
+ * so nobody can switch off another person's pushes by sending their token. A
+ * token that is not registered to the caller is not an error: sign-out must
+ * succeed whether or not registration ever did.
+ */
+const removeDeviceToken = async (req, res) => {
+  try {
+    const result = await query(
+      'DELETE FROM device_tokens WHERE token = $1 AND user_id = $2',
+      [req.body.token, req.user.id]
+    );
+    const removed = result.rowCount > 0;
+    return success(
+      res,
+      { removed },
+      removed ? 'Device removed from notifications' : 'Device was not registered for notifications'
+    );
+  } catch (err) {
+    console.error(`Remove device token error (user ${req.user && req.user.id}):`, err);
+    return error(res, 'Failed to remove this device from notifications', 500);
+  }
+};
+
+module.exports = {
+  getProfile, updateProfile, getPreferences, updatePreferences,
+  registerDeviceToken, removeDeviceToken, MAX_DEVICES_PER_USER,
+};

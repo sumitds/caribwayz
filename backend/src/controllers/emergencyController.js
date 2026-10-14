@@ -3,6 +3,7 @@ const { haversineDistance, estimateETA } = require('../utils/haversine');
 const { resolveResponderAccess } = require('../middleware/auth');
 const { success, created, error, notFound, forbidden } = require('../utils/response');
 const { displayName } = require('../utils/displayName');
+const { notify } = require('../services/notificationService');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -31,43 +32,28 @@ const ALERT_STATUSES = ['active', 'resolved'];
 const MAX_CANDIDATE_ALERTS = 1000;
 
 /**
- * Writes an in-app notification to every approved responder.
- *
- * This is the delivery path that actually works today: the mobile client has no
- * FCM messaging integration yet, so a topic push reaches nobody, while these
- * rows are served by GET /api/v1/notifications and survive the responder being
- * offline when the alert was raised.
+ * Notifies every approved responder: a row in their notification list, and a
+ * push to their phones when they have emergency pushes on.
  *
  * The notification deliberately carries no coordinates and no reporter detail.
  * Notification rows are readable with only `authenticate`, they persist after
  * an account is demoted, and they are pageable as an archive -- so they hold a
  * reference_id and the responder opens the alert through the gated endpoint,
- * where access is re-checked at read time.
+ * where access is re-checked at read time. The push carries the same text.
  *
  * Never throws. A notification failure must not fail the alert itself.
  * Returns the number of responders notified, or -1 when delivery failed, so the
  * caller can tell "nobody is registered" apart from "we could not tell".
  */
 const notifyResponders = async (alert) => {
+  let responderIds;
   try {
-    // INSERT ... SELECT keeps this at three bound parameters no matter how many
-    // responders exist. Building one placeholder pair per responder would send
-    // 3 + N parameters and break past the wire protocol's parameter ceiling,
-    // silently stopping every notification for every emergency.
     const result = await query(
-      `INSERT INTO notifications (user_id, title, message, type, reference_id)
-       SELECT id, $1, $2, 'emergency', $3
-         FROM users
+      `SELECT id FROM users
         WHERE status = 'active'
-          AND (is_responder = TRUE OR role = 'admin')`,
-      [
-        `EMERGENCY: ${String(alert.type).toUpperCase()}`,
-        'A CaribWayz user has raised an emergency. Open the Emergencies panel for the location.',
-        alert.id,
-      ]
+          AND (is_responder = TRUE OR role = 'admin')`
     );
-
-    return result.rowCount || 0;
+    responderIds = result.rows.map((row) => row.id);
   } catch (err) {
     // Logged at error level with the alert id: a total notification outage is
     // otherwise invisible, and every caller would be told "no responders".
@@ -77,6 +63,16 @@ const notifyResponders = async (alert) => {
     );
     return -1;
   }
+
+  // notify() writes the rows with one uuid[] parameter, so the statement has a
+  // fixed parameter count however many responders exist, and never throws.
+  return notify(responderIds, {
+    type: 'emergency',
+    category: 'emergency',
+    title: `EMERGENCY: ${String(alert.type).toUpperCase()}`,
+    message: 'A CaribWayz user has raised an emergency. Open the Emergencies panel for the location.',
+    reference_id: alert.id,
+  });
 };
 
 const triggerEmergency = async (req, res) => {
@@ -108,31 +104,6 @@ const triggerEmergency = async (req, res) => {
     const alert = result.rows[0];
 
     const notified = await notifyResponders(alert);
-
-    // Firebase Cloud Messaging, when configured. No mobile client subscribes to
-    // this topic yet, so it is not the delivery path -- notifyResponders above
-    // is. Left in place for when push notifications land in Milestone 2.
-    try {
-      const { getMessaging } = require('../config/firebase');
-      const messaging = getMessaging();
-      if (messaging) {
-        await messaging.send({
-          topic: 'emergency_alerts',
-          notification: {
-            title: `EMERGENCY: ${type.toUpperCase()}`,
-            body: `Emergency reported near your area. Stay alert.`,
-          },
-          data: {
-            emergency_id: alert.id,
-            type: alert.type,
-          },
-          android: { priority: 'high' },
-          apns: { payload: { aps: { contentAvailable: true } } },
-        });
-      }
-    } catch (fcmErr) {
-      console.warn('FCM notification failed:', fcmErr.message);
-    }
 
     // responders_notified lets the client tell the user whether anyone was
     // actually reachable, instead of implying help is coming when no responder
@@ -397,22 +368,14 @@ const loadDeskAlert = async (id) => {
  * Never throws.
  */
 const notifyReporterAcknowledged = async (alert) => {
-  try {
-    await query(
-      `INSERT INTO notifications (user_id, title, message, type, reference_id)
-       VALUES ($1, $2, $3, 'emergency', $4)`,
-      [
-        alert.user_id,
-        'Your emergency has been seen',
-        'The CaribWayz emergency desk has your alert and is arranging help. If you are in danger, call your local emergency number now.',
-        alert.id,
-      ]
-    );
-    return true;
-  } catch (err) {
-    console.error(`Acknowledgement notice failed for alert ${alert.id}:`, err.message);
-    return false;
-  }
+  const written = await notify([alert.user_id], {
+    type: 'emergency',
+    category: 'emergency',
+    title: 'Your emergency has been seen',
+    message: 'The CaribWayz emergency desk has your alert and is arranging help. If you are in danger, call your local emergency number now.',
+    reference_id: alert.id,
+  });
+  return written > 0;
 };
 
 const sameUser = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();

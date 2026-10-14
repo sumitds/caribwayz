@@ -31,6 +31,12 @@ const runMigrations = require('./src/migrations/migrate');
 
 const app = express();
 
+// Render terminates connections at its proxy, so without this req.ip is the
+// proxy's address for every caller and each per-IP rate limit becomes one
+// bucket shared by all users. 1 trusts exactly the hop Render adds to
+// X-Forwarded-For; entries a client puts there itself are still ignored.
+app.set('trust proxy', 1);
+
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customSiteTitle: 'CaribWayz API Docs',

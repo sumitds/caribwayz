@@ -62,7 +62,7 @@ describe('emergency desk over HTTP against Postgres', { skip: !process.env.TEST_
     delete process.env.DATABASE_URL;
     // Everything that captured the db module at load is loaded fresh, so it
     // talks to the throwaway database.
-    for (const mod of ['config/db', 'middleware/auth', 'controllers/emergencyController', 'routes/emergency', 'migrations/migrate']) {
+    for (const mod of ['config/db', 'middleware/auth', 'services/notificationService', 'controllers/emergencyController', 'routes/emergency', 'migrations/migrate']) {
       delete require.cache[require.resolve(path.join(__dirname, '../src', mod))];
     }
     await require('../src/migrations/migrate')();
