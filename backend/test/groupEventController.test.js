@@ -7,6 +7,8 @@ const { buildGroupEventHandlers, NOTE_MAX_LENGTH } = require('../src/controllers
 const GROUP_ID = '6f1c2b9e-3d4a-4c5b-8e7f-0a1b2c3d4e5f';
 const SENDER_ID = '11111111-2222-4333-8444-555555555555';
 const OTHER_ID = '99999999-8888-4777-8666-555555555555';
+const THIRD_ID = '77777777-6666-4555-8444-333333333333';
+const FOURTH_ID = '44444444-3333-4222-8111-000000000000';
 const FIXED_NOW = new Date('2026-10-03T12:00:00.000Z');
 
 /** Minimal Express response double recording status and JSON body. */
@@ -31,27 +33,30 @@ const makeDb = (overrides = {}) => {
   const calls = [];
   const handlers = {
     membership: async () => ({ rows: [{ group_name: 'Beach Run', user_name: 'Asha' }], rowCount: 1 }),
-    sosNotify: async () => ({ rows: [], rowCount: 3 }),
     groupLookup: async () => ({ rows: [{ id: GROUP_ID, group_name: 'Beach Run', created_by: SENDER_ID }], rowCount: 1 }),
     otherMembers: async () => ({ rows: [{ user_id: OTHER_ID }], rowCount: 1 }),
     deleteGroup: async () => ({ rows: [], rowCount: 1 }),
-    deleteNotify: async () => ({ rows: [], rowCount: 1 }),
-    checkInNotify: async () => ({ rows: [], rowCount: 2 }),
+    // notificationService writes one row per recipient id it is given ($4).
+    notifyInsert: async (params) => ({ rows: [], rowCount: params[3].length }),
     ...overrides,
   };
   const query = async (text, params) => {
     calls.push({ text, params });
     if (/FROM group_members gm\s+JOIN groups g/.test(text)) return handlers.membership(params);
-    if (/INSERT INTO notifications[\s\S]*'emergency'/.test(text)) return handlers.sosNotify(params);
     if (/SELECT id, group_name, created_by FROM groups/.test(text)) return handlers.groupLookup(params);
     if (/SELECT user_id FROM group_members/.test(text)) return handlers.otherMembers(params);
     if (/DELETE FROM groups/.test(text)) return handlers.deleteGroup(params);
-    if (/INSERT INTO notifications[\s\S]*'group', gm\.group_id/.test(text)) return handlers.checkInNotify(params);
-    if (/INSERT INTO notifications[\s\S]*'group'/.test(text)) return handlers.deleteNotify(params);
+    if (/INSERT INTO notifications/.test(text)) return handlers.notifyInsert(params);
     throw new Error(`Unexpected SQL in test: ${text}`);
   };
   return { query, calls };
 };
+
+/** Three other active members, as the recipient query returns them. */
+const threeOthers = async () => ({
+  rows: [{ user_id: OTHER_ID }, { user_id: THIRD_ID }, { user_id: FOURTH_ID }],
+  rowCount: 3,
+});
 
 /** Fake socket layer recording every broadcast frame. */
 const makeWs = ({ sent = 3, senderOnline = true } = {}) => {
@@ -83,7 +88,7 @@ const captureConsoleError = (t) => {
 
 describe('POST /groups/:id/sos', () => {
   test('broadcasts the exact SOS frame and notifies other members', async () => {
-    const { handlers, ws, db } = build();
+    const { handlers, ws, db } = build({ db: makeDb({ otherMembers: threeOthers }) });
     const res = makeRes();
     await handlers.sendSos(makeReq({
       body: { latitude: 10.6918, longitude: -61.2225, raised_at: '2026-10-03T11:59:58.123Z', note: 'Flat tyre' },
@@ -105,16 +110,22 @@ describe('POST /groups/:id/sos', () => {
       note: 'Flat tyre',
     });
 
+    const recipients = db.calls.find((c) => /SELECT user_id FROM group_members/.test(c.text));
+    assert.ok(recipients, 'recipients were read');
+    assert.deepEqual(recipients.params, [GROUP_ID, SENDER_ID], 'the sender is not notified of their own SOS');
+    assert.match(recipients.text, /status = 'active'/);
+    assert.match(recipients.text, /user_id <> \$2/);
+
     const notify = db.calls.find((c) => /INSERT INTO notifications/.test(c.text));
     assert.ok(notify, 'notification insert was issued');
-    const [title, message, groupParam, excluded] = notify.params;
+    const [title, message, groupParam, recipientIds, type] = notify.params;
     assert.equal(title, 'SOS from Asha');
     assert.match(message, /Beach Run/);
     assert.doesNotMatch(message, /10\.69|61\.22/, 'notification must not carry coordinates');
     assert.doesNotMatch(message, /Flat tyre/, 'notification must not carry the note');
     assert.equal(groupParam, GROUP_ID);
-    assert.equal(excluded, SENDER_ID, 'the sender is not notified of their own SOS');
-    assert.match(notify.text, /status = 'active'/);
+    assert.deepEqual(recipientIds, [OTHER_ID, THIRD_ID, FOURTH_ID]);
+    assert.equal(type, 'emergency');
   });
 
   test('omits note from the frame when absent or blank', async () => {
@@ -228,14 +239,60 @@ describe('POST /groups/:id/sos', () => {
 
   test('a notification insert failure does not fail the SOS', async (t) => {
     const logged = captureConsoleError(t);
-    const db = makeDb({ sosNotify: async () => { throw new Error('relation "notifications" is locked'); } });
+    const db = makeDb({ notifyInsert: async () => { throw new Error('relation "notifications" is locked'); } });
     const { handlers, ws } = build({ db });
     const res = makeRes();
     await handlers.sendSos(makeReq({ body: { latitude: 1, longitude: 2 } }), res);
     assert.equal(res.statusCode, 200);
     assert.deepEqual(res.body.data, { delivered_live: 2, notified: -1 });
     assert.equal(ws.frames.length, 1);
-    assert.ok(logged.some((line) => line.includes(GROUP_ID) && line.includes('locked')));
+    assert.ok(logged.some((line) => line.includes('SOS from Asha') && line.includes('locked')), 'the database error is logged');
+    assert.ok(logged.some((line) => line.includes('Group SOS notification failed') && line.includes(GROUP_ID)), 'the group is named');
+  });
+
+  test('a failure reading the members to notify does not fail the SOS', async (t) => {
+    const logged = captureConsoleError(t);
+    const db = makeDb({ otherMembers: async () => { throw new Error('read failed'); } });
+    const { handlers, ws } = build({ db });
+    const res = makeRes();
+    await handlers.sendSos(makeReq({ body: { latitude: 1, longitude: 2 } }), res);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.data, { delivered_live: 2, notified: -1 });
+    assert.equal(ws.frames.length, 1);
+    assert.equal(db.calls.some((c) => /INSERT INTO notifications/.test(c.text)), false);
+    assert.ok(logged.some((line) => line.includes(GROUP_ID) && line.includes('read failed')));
+  });
+
+  test('an SOS in a group with no other active member writes nothing and reports 0', async () => {
+    const db = makeDb({ otherMembers: async () => ({ rows: [], rowCount: 0 }) });
+    const { handlers } = build({ db });
+    const res = makeRes();
+    await handlers.sendSos(makeReq({ body: { latitude: 1, longitude: 2 } }), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.data.notified, 0);
+    assert.equal(db.calls.some((c) => /INSERT INTO notifications/.test(c.text)), false);
+  });
+
+  test('an SOS is delivered through the injected notifier with the emergency category', async () => {
+    const sent = [];
+    const db = makeDb({ otherMembers: threeOthers });
+    const ws = makeWs();
+    const handlers = buildGroupEventHandlers({
+      query: db.query,
+      broadcastToGroup: ws.broadcastToGroup,
+      isMemberConnected: ws.isMemberConnected,
+      now: () => FIXED_NOW,
+      notify: async (userIds, payload) => { sent.push({ userIds, payload }); return userIds.length; },
+    });
+    const res = makeRes();
+    await handlers.sendSos(makeReq({ body: { latitude: 1, longitude: 2 } }), res);
+    assert.equal(res.body.data.notified, 3);
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].userIds, [OTHER_ID, THIRD_ID, FOURTH_ID]);
+    assert.deepEqual(
+      { type: sent[0].payload.type, category: sent[0].payload.category, reference_id: sent[0].payload.reference_id },
+      { type: 'emergency', category: 'emergency', reference_id: GROUP_ID }
+    );
   });
 
   test('does not count the sender when they are offline', async () => {
@@ -276,7 +333,9 @@ describe('POST /groups/:id/sos', () => {
 
 describe('POST /groups/:id/check-in', () => {
   test('broadcasts the exact check-in frame with coordinates', async () => {
-    const { handlers, ws, db } = build();
+    const { handlers, ws, db } = build({
+      db: makeDb({ otherMembers: async () => ({ rows: [{ user_id: OTHER_ID }, { user_id: THIRD_ID }], rowCount: 2 }) }),
+    });
     const res = makeRes();
     await handlers.checkIn(makeReq({
       body: { checked_in: true, latitude: 10.1, longitude: -61.2, at: '2026-10-03T11:30:00.000Z' },
@@ -298,11 +357,12 @@ describe('POST /groups/:id/check-in', () => {
     // Saved for members without the app open; no coordinates in the row.
     const notify = db.calls.find((c) => /INSERT INTO notifications/.test(c.text));
     assert.ok(notify, 'a check-in is saved as a notification');
-    assert.match(notify.text, /'group'/);
     assert.equal(notify.params[0], 'Asha checked in');
     assert.equal(notify.params[1], 'Asha checked in and is safe, in your group "Beach Run".');
-    assert.deepEqual(notify.params.slice(2), [GROUP_ID, SENDER_ID]);
+    assert.deepEqual(notify.params.slice(2), [GROUP_ID, [OTHER_ID, THIRD_ID], 'group']);
     assert.ok(!/10\.1|-61\.2/.test(notify.params.join(' ')), 'no coordinates in the row');
+    const recipients = db.calls.find((c) => /SELECT user_id FROM group_members/.test(c.text));
+    assert.deepEqual(recipients.params, [GROUP_ID, SENDER_ID], 'the sender is not notified of their own check-in');
   });
 
   test('a cancelled check-in is not saved as a notification', async () => {
@@ -312,10 +372,11 @@ describe('POST /groups/:id/check-in', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.data.notified, 0);
     assert.equal(db.calls.some((c) => /INSERT INTO notifications/.test(c.text)), false);
+    assert.equal(db.calls.some((c) => /SELECT user_id FROM group_members/.test(c.text)), false);
   });
 
   test('a check-in notification failure does not fail the check-in', async () => {
-    const db = makeDb({ checkInNotify: async () => { throw new Error('db down'); } });
+    const db = makeDb({ notifyInsert: async () => { throw new Error('db down'); } });
     const { handlers } = build({ db });
     const res = makeRes();
     const original = console.error;
@@ -425,6 +486,7 @@ describe('DELETE /groups/:id', () => {
     assert.equal(notify.params[1], 'Beach Run was deleted by its creator');
     assert.equal(notify.params[2], GROUP_ID);
     assert.deepEqual(notify.params[3], [OTHER_ID]);
+    assert.equal(notify.params[4], 'group');
   });
 
   test('creator id comparison is case-insensitive', async () => {
@@ -487,7 +549,7 @@ describe('DELETE /groups/:id', () => {
 
   test('a notification insert failure does not fail the delete', async (t) => {
     const logged = captureConsoleError(t);
-    const db = makeDb({ deleteNotify: async () => { throw new Error('insert failed'); } });
+    const db = makeDb({ notifyInsert: async () => { throw new Error('insert failed'); } });
     const { handlers, ws } = build({ db });
     const res = makeRes();
     await handlers.deleteGroup(makeReq(), res);

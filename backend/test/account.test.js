@@ -123,6 +123,61 @@ describe('deleteAccount', () => {
     assert.equal(client.released, true);
   });
 
+  test('members of owned groups get the notice row inside the transaction and the push only after the commit', async () => {
+    const events = [];
+    const client = makeClient({ owned: [{ id: GROUP_ID, group_name: 'Beach Run', others: [OTHER_ID] }] });
+    const originalQuery = client.query;
+    client.query = async (text, params) => { events.push(text.trim().split(/\s+/)[0]); return originalQuery(text, params); };
+    const handlers = buildAccountHandlers({
+      query: async () => ({ rows: [{ id: USER_ID, role: 'user', password_hash: null, profile_image: null }], rowCount: 1 }),
+      getClient: async () => client,
+      broadcastToGroup: () => 1,
+      getStorage: () => null,
+      getRealtimeDB: () => null,
+      notifications: {
+        insertNotifications: async (run, ids, notice) => {
+          events.push('rows');
+          await run('INSERT INTO notifications', []);
+          assert.deepEqual(ids, [OTHER_ID]);
+          assert.deepEqual(notice, {
+            type: 'group', category: 'group', title: 'Group deleted',
+            message: 'Beach Run was deleted by its creator', reference_id: GROUP_ID,
+          });
+          return 1;
+        },
+        sendPush: async (ids, notice) => {
+          events.push('push');
+          assert.deepEqual(ids, [OTHER_ID]);
+          assert.equal(notice.category, 'group');
+        },
+      },
+    });
+    const res = makeRes();
+    await handlers.deleteAccount({ user: { id: USER_ID }, body: { confirm: 'DELETE' } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.ok(events.indexOf('INSERT') > events.indexOf('BEGIN'), 'the row goes through the transaction client');
+    assert.ok(events.indexOf('rows') < events.indexOf('COMMIT'), 'rows are part of the transaction');
+    assert.ok(events.indexOf('push') > events.indexOf('COMMIT'), 'nothing is pushed for a delete that could still roll back');
+  });
+
+  test('a failed delete pushes nothing', async (t) => {
+    silence(t);
+    const pushed = [];
+    const client = makeClient({ owned: [{ id: GROUP_ID, group_name: 'G', others: [OTHER_ID] }], failOn: /DELETE FROM users/ });
+    const handlers = buildAccountHandlers({
+      query: async () => ({ rows: [{ id: USER_ID, role: 'user', password_hash: null, profile_image: null }], rowCount: 1 }),
+      getClient: async () => client,
+      broadcastToGroup: () => 1,
+      getStorage: () => null,
+      getRealtimeDB: () => null,
+      notifications: { insertNotifications: async () => 1, sendPush: async (ids) => { pushed.push(ids); } },
+    });
+    const res = makeRes();
+    await handlers.deleteAccount({ user: { id: USER_ID }, body: { confirm: 'DELETE' } }, res);
+    assert.equal(res.statusCode, 500);
+    assert.equal(pushed.length, 0);
+  });
+
   test('a failure inside the transaction rolls back, releases the client and broadcasts nothing', async (t) => {
     silence(t);
     const client = makeClient({ owned: [{ id: GROUP_ID, group_name: 'G', others: [OTHER_ID] }], failOn: /DELETE FROM users/ });

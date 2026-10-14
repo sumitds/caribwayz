@@ -149,6 +149,9 @@ describe('stored SOS copy', () => {
       if (/FROM group_members gm\s+JOIN groups g/.test(text)) {
         return { rows: [{ group_name: 'Beach Run', user_name: storedName }], rowCount: 1 };
       }
+      if (/SELECT user_id FROM group_members/.test(text)) {
+        return { rows: [{ user_id: '99999999-8888-4777-8666-555555555555' }], rowCount: 1 };
+      }
       if (/INSERT INTO notifications/.test(text)) { inserts.push(params); return { rows: [], rowCount: 1 }; }
       throw new Error(`Unexpected SQL in test: ${text}`);
     };

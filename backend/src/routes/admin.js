@@ -9,6 +9,7 @@ const {
   getPartners, addPartner, updatePartnerStatus,
   getSponsorships, updateSponsorshipStatus,
   getPayouts, updatePayoutStatus,
+  BROADCAST_TYPES,
 } = require('../controllers/adminController');
 
 router.use(authenticate, requireAdmin);
@@ -39,7 +40,7 @@ router.get('/broadcasts', getBroadcasts);
 router.post('/broadcasts', [
   body('title').notEmpty().withMessage('Title is required'),
   body('message').notEmpty().withMessage('Message is required'),
-  body('type').notEmpty().withMessage('Type is required'),
+  body('type').isIn(BROADCAST_TYPES).withMessage(`Type must be one of: ${BROADCAST_TYPES.join(', ')}`),
 ], validate, createBroadcast);
 router.delete('/broadcasts/:id', deleteBroadcast);
 

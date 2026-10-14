@@ -2,6 +2,7 @@ const router = require('express').Router();
 const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 const { authenticate, requireResponder } = require('../middleware/auth');
+const { perUser } = require('../middleware/rateLimit');
 const {
   triggerEmergency,
   listEmergencies,
@@ -14,8 +15,19 @@ const {
 
 router.use(authenticate);
 
+// Every alert rings every responder's phone on the loud alert channel, so one
+// account may not raise more than a few in a short time. The limit is far above
+// what a real emergency needs: the first alert is already with the desk.
+const EMERGENCY_LIMIT = 5;
+const EMERGENCY_WINDOW_MS = 10 * 60 * 1000;
+
 router.post(
   '/',
+  perUser(
+    EMERGENCY_LIMIT,
+    EMERGENCY_WINDOW_MS,
+    'You have raised several emergency alerts in the last few minutes. Responders already have them; please wait before sending another.'
+  ),
   [
     body('type')
       .notEmpty().withMessage('Emergency type is required')

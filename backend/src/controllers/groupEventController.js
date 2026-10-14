@@ -1,5 +1,7 @@
 const db = require('../config/db');
 const ws = require('../services/wsService');
+const firebase = require('../config/firebase');
+const { buildNotificationService } = require('../services/notificationService');
 const { success, error, notFound, forbidden } = require('../utils/response');
 const { displayName } = require('../utils/displayName');
 
@@ -9,7 +11,8 @@ const { displayName } = require('../utils/displayName');
  * The WebSocket server never relays client messages, so the REST handler that
  * accepts an event is the only place it can be delivered from. Each handler
  * validates, authorises against the database, then broadcasts to the group's
- * room and, where a member may be offline, writes a notification row.
+ * room and, where a member may be offline, sends a notification (a row in
+ * their list, and a push to their phone when they allow group/emergency push).
  */
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -107,8 +110,16 @@ const sameId = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
  * @param {(groupId: string, payload: object) => number} deps.broadcastToGroup
  * @param {(groupId: string, userId: string) => boolean} deps.isMemberConnected
  * @param {() => Date} [deps.now]
+ * @param {(userIds: string[], payload: object) => Promise<number>} [deps.notify]
+ *   notificationService.notify; by default built on [deps.query]
  */
-const buildGroupEventHandlers = ({ query, broadcastToGroup, isMemberConnected, now = () => new Date() }) => {
+const buildGroupEventHandlers = ({
+  query,
+  broadcastToGroup,
+  isMemberConnected,
+  now = () => new Date(),
+  notify = buildNotificationService({ query, getMessaging: firebase.getMessaging }).notify,
+}) => {
   /**
    * The caller's active membership, with the names the frames and notification
    * copy need. The JWT carries only { id, email, role }, so req.user.name is
@@ -139,64 +150,6 @@ const buildGroupEventHandlers = ({ query, broadcastToGroup, isMemberConnected, n
     return Math.max(0, sent - (senderOnline ? 1 : 0));
   };
 
-  /**
-   * Writes an SOS notification to every other active member.
-   *
-   * Like notifyResponders, the row carries no coordinates and no note: rows are
-   * readable with only `authenticate`, persist after the member leaves the
-   * group, and are pageable as an archive. The live frame carries the location;
-   * the row only says who raised it and in which group.
-   *
-   * Never throws. Returns the number notified, or -1 when the insert failed.
-   */
-  const notifySosToMembers = async (groupId, senderId, senderName, groupName) => {
-    try {
-      const result = await query(
-        `INSERT INTO notifications (user_id, title, message, type, reference_id)
-         SELECT gm.user_id, $1, $2, 'emergency', gm.group_id
-           FROM group_members gm
-          WHERE gm.group_id = $3 AND gm.status = 'active' AND gm.user_id <> $4`,
-        [
-          truncate(`SOS from ${senderName}`, TITLE_MAX_LENGTH),
-          `${senderName} raised an SOS in your group "${groupName}". Open the group to see where they are.`,
-          groupId,
-          senderId,
-        ]
-      );
-      return result.rowCount || 0;
-    } catch (err) {
-      console.error(`Group SOS notification failed for group ${groupId}:`, err.message);
-      return -1;
-    }
-  };
-
-  /**
-   * Saves a check-in for members who do not have the app open, so "I'm safe"
-   * still reaches them later. Like the SOS row, it carries no coordinates.
-   *
-   * Never throws. Returns the number notified, or -1 when the insert failed.
-   */
-  const notifyCheckInToMembers = async (groupId, senderId, senderName, groupName) => {
-    try {
-      const result = await query(
-        `INSERT INTO notifications (user_id, title, message, type, reference_id)
-         SELECT gm.user_id, $1, $2, 'group', gm.group_id
-           FROM group_members gm
-          WHERE gm.group_id = $3 AND gm.status = 'active' AND gm.user_id <> $4`,
-        [
-          truncate(`${senderName} checked in`, TITLE_MAX_LENGTH),
-          `${senderName} checked in and is safe, in your group "${groupName}".`,
-          groupId,
-          senderId,
-        ]
-      );
-      return result.rowCount || 0;
-    } catch (err) {
-      console.error(`Group check-in notification failed for group ${groupId}:`, err.message);
-      return -1;
-    }
-  };
-
   /** Active members other than [userId]. Never throws; null when the read failed. */
   const loadOtherActiveMemberIds = async (groupId, userId) => {
     try {
@@ -207,34 +160,67 @@ const buildGroupEventHandlers = ({ query, broadcastToGroup, isMemberConnected, n
       );
       return result.rows.map((row) => row.user_id);
     } catch (err) {
-      console.error(`Loading members to notify of deletion of group ${groupId} failed:`, err.message);
+      console.error(`Loading members to notify in group ${groupId} failed:`, err.message);
       return null;
     }
   };
 
   /**
+   * Notifies [recipientIds] (null when they could not be read). [what] names
+   * the event in the log, with the group id, when delivery fails.
+   *
+   * Never throws. Returns the number notified, or -1 when it failed.
+   */
+  const notifyMembers = async (groupId, recipientIds, what, payload) => {
+    if (recipientIds === null) return -1;
+    if (recipientIds.length === 0) return 0;
+    const notified = await notify(recipientIds, payload);
+    if (notified < 0) console.error(`${what} notification failed for group ${groupId}`);
+    return notified;
+  };
+
+  /**
+   * Sends an SOS notification to every other active member.
+   *
+   * Like notifyResponders, it carries no coordinates and no note: rows are
+   * readable with only `authenticate`, persist after the member leaves the
+   * group, and are pageable as an archive. The live frame carries the location;
+   * the notification only says who raised it and in which group.
+   */
+  const notifySosToMembers = async (groupId, senderId, senderName, groupName) =>
+    notifyMembers(groupId, await loadOtherActiveMemberIds(groupId, senderId), 'Group SOS', {
+      type: 'emergency',
+      category: 'emergency',
+      title: truncate(`SOS from ${senderName}`, TITLE_MAX_LENGTH),
+      message: `${senderName} raised an SOS in your group "${groupName}". Open the group to see where they are.`,
+      reference_id: groupId,
+    });
+
+  /**
+   * Saves a check-in for members who do not have the app open, so "I'm safe"
+   * still reaches them later. Like the SOS, it carries no coordinates.
+   */
+  const notifyCheckInToMembers = async (groupId, senderId, senderName, groupName) =>
+    notifyMembers(groupId, await loadOtherActiveMemberIds(groupId, senderId), 'Group check-in', {
+      type: 'group',
+      category: 'group',
+      title: truncate(`${senderName} checked in`, TITLE_MAX_LENGTH),
+      message: `${senderName} checked in and is safe, in your group "${groupName}".`,
+      reference_id: groupId,
+    });
+
+  /**
    * Tells former members the group is gone. Runs after the delete, when the
    * group_members rows have already cascaded away, so recipients are passed in.
-   * A single uuid[] parameter keeps the bound-parameter count fixed however
-   * large the group is.
-   *
-   * Never throws. Returns the number notified, or -1 when the insert failed.
    */
-  const notifyGroupDeleted = async (groupId, groupName, recipientIds) => {
-    if (recipientIds.length === 0) return 0;
-    try {
-      const result = await query(
-        `INSERT INTO notifications (user_id, title, message, type, reference_id)
-         SELECT recipient, $1, $2, 'group', $3
-           FROM unnest($4::uuid[]) AS recipient`,
-        ['Group deleted', `${groupName} was deleted by its creator`, groupId, recipientIds]
-      );
-      return result.rowCount || 0;
-    } catch (err) {
-      console.error(`Group deletion notification failed for group ${groupId}:`, err.message);
-      return -1;
-    }
-  };
+  const notifyGroupDeleted = async (groupId, groupName, recipientIds) =>
+    notifyMembers(groupId, recipientIds, 'Group deletion', {
+      type: 'group',
+      category: 'group',
+      title: 'Group deleted',
+      message: `${groupName} was deleted by its creator`,
+      reference_id: groupId,
+    });
 
   const sendSos = async (req, res) => {
     const { id } = req.params;
@@ -356,9 +342,7 @@ const buildGroupEventHandlers = ({ query, broadcastToGroup, isMemberConnected, n
         deleted_by: req.user.id,
       });
 
-      const notified = recipients === null
-        ? -1
-        : await notifyGroupDeleted(id, group.group_name, recipients);
+      const notified = await notifyGroupDeleted(id, group.group_name, recipients);
 
       return success(res, { delivered_live: deliveredLive, notified }, 'Group deleted');
     } catch (err) {
