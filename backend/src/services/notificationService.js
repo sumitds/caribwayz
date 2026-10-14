@@ -181,6 +181,9 @@ const buildNotificationService = ({ query, getMessaging }) => {
       let sent = 0;
       let failed = 0;
       const dead = [];
+      // Why tokens failed, as FCM error code -> count, so a log line says what
+      // went wrong (bad credentials, sender mismatch) without naming a token.
+      const reasons = new Map();
 
       for (let i = 0; i < tokens.length; i += FCM_BATCH_SIZE) {
         const batch = tokens.slice(i, i + FCM_BATCH_SIZE);
@@ -191,7 +194,10 @@ const buildNotificationService = ({ query, getMessaging }) => {
           sent += response.successCount;
           failed += response.failureCount;
           response.responses.forEach((r, index) => {
-            if (!r.success && r.error && DEAD_TOKEN_CODES.has(r.error.code)) dead.push(batch[index]);
+            if (r.success) return;
+            const code = (r.error && r.error.code) || 'unknown';
+            reasons.set(code, (reasons.get(code) || 0) + 1);
+            if (DEAD_TOKEN_CODES.has(code)) dead.push(batch[index]);
           });
         } catch (err) {
           // A whole batch failing (credentials, network) is not the tokens'
@@ -203,7 +209,11 @@ const buildNotificationService = ({ query, getMessaging }) => {
 
       const pruned = await pruneTokens(dead);
       if (failed > 0) {
-        console.warn(`Push "${category}": ${sent} sent, ${failed} failed, ${pruned} dead token(s) removed`);
+        const why = [...reasons].map(([code, count]) => `${code} x${count}`).join(', ');
+        console.warn(
+          `Push "${category}": ${sent} sent, ${failed} failed, ${pruned} dead token(s) removed` +
+            (why ? ` (${why})` : '')
+        );
       }
       return { sent, failed, pruned };
     } catch (err) {
