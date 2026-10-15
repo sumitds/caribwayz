@@ -111,7 +111,11 @@ const build = ({ db = makeDb(), tokens = {}, auth } = {}) => {
     query: db.query,
     getClient: db.getClient,
     getAuth: () => (auth === undefined ? makeAuth(tokens) : auth),
-    generateToken: (p) => { minted.push(p); return `jwt-for-${p.id}`; },
+    // Every token comes from a recorded session; minted keeps the claims it was asked for.
+    startSession: async ({ user }) => {
+      minted.push({ id: user.id, email: user.email, role: user.role });
+      return `jwt-for-${user.id}`;
+    },
     isEmailConfigured: () => true,
     sendPasswordResetCode: async () => {},
   });
@@ -370,7 +374,7 @@ describe('Firebase sign-in: accounts', () => {
     };
     const handlers = buildAuthHandlers({
       query: racing, getClient: db.getClient, getAuth: () => makeAuth({ g: claims('google.com', { email: 'race@example.com', email_verified: true, name: 'R' }) }),
-      generateToken: () => 'jwt', isEmailConfigured: () => true, sendPasswordResetCode: async () => {},
+      startSession: async () => 'jwt', isEmailConfigured: () => true, sendPasswordResetCode: async () => {},
     });
     const res = await call(handlers.googleLogin, { idToken: 'g' });
     assert.equal(res.statusCode, 409);
@@ -398,7 +402,7 @@ describe('Firebase sign-in: accounts', () => {
     };
     const handlers = buildAuthHandlers({
       query, getClient: db.getClient, getAuth: () => makeAuth(tokens),
-      generateToken: () => 'jwt', isEmailConfigured: () => true, sendPasswordResetCode: async () => {},
+      startSession: async () => 'jwt', isEmailConfigured: () => true, sendPasswordResetCode: async () => {},
     });
     const res = await call(handlers.phoneLogin, { idToken: 'p', name: 'Loser' });
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
@@ -426,7 +430,7 @@ describe('Firebase sign-in: accounts', () => {
     };
     const handlers = buildAuthHandlers({
       query, getClient: db.getClient, getAuth: () => makeAuth(tokens),
-      generateToken: () => 'jwt', isEmailConfigured: () => true, sendPasswordResetCode: async () => {},
+      startSession: async () => 'jwt', isEmailConfigured: () => true, sendPasswordResetCode: async () => {},
     });
     const res = await call(handlers.googleLogin, { idToken: 'g' });
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
@@ -537,7 +541,7 @@ describe('Firebase sign-in against Postgres', { skip: !process.env.TEST_DATABASE
     query: q,
     getClient: () => pool.connect(),
     getAuth: () => makeAuth(tokens),
-    generateToken: () => 'jwt',
+    startSession: async () => 'jwt',
     isEmailConfigured: () => true,
     sendPasswordResetCode: async () => {},
   });

@@ -36,10 +36,19 @@ const GROUP_EVENT_WINDOW_MS = 10 * 60 * 1000;
 const perGroupMember = (message) => perUser(GROUP_EVENT_LIMIT, GROUP_EVENT_WINDOW_MS, message, (req) => `group:${req.params.id}`);
 router.post('/:id/sos', perGroupMember('Too many SOS alerts to this group. Please wait a few minutes before sending another.'), sendSos);
 router.post('/:id/check-in', perGroupMember('Too many check-ins to this group. Please wait a few minutes before checking in again.'), checkIn);
+// Each address on an invite is an email to someone else's inbox, so one
+// invite names at most MAX_INVITE_ADDRESSES and each account has a budget.
+const MAX_INVITE_ADDRESSES = 10;
+const INVITE_LIMIT = 20;
+const INVITE_WINDOW_MS = 60 * 60 * 1000;
 router.post(
   '/:id/invite',
+  perUser(INVITE_LIMIT, INVITE_WINDOW_MS, 'You have sent a lot of invitations. Please wait an hour and try again.'),
   [
-    body('email').isArray({ min: 1 }).withMessage('email must be a non-empty array'),
+    body('email')
+      .isArray({ min: 1 }).withMessage('email must be a non-empty array')
+      .bail()
+      .isArray({ max: MAX_INVITE_ADDRESSES }).withMessage(`You can invite up to ${MAX_INVITE_ADDRESSES} people at a time`),
     body('email.*').isEmail().withMessage('Each email must be a valid address'),
   ],
   validate,

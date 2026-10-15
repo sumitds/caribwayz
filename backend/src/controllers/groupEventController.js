@@ -4,6 +4,7 @@ const firebase = require('../config/firebase');
 const { buildNotificationService } = require('../services/notificationService');
 const { success, error, notFound, forbidden } = require('../utils/response');
 const { displayName } = require('../utils/displayName');
+const { blockedWithSubquery, notBlockedBetween, idList } = require('../services/blockService');
 
 /**
  * Group events that other members must see: SOS, check-in and deletion.
@@ -13,6 +14,10 @@ const { displayName } = require('../utils/displayName');
  * validates, authorises against the database, then broadcasts to the group's
  * room and, where a member may be offline, sends a notification (a row in
  * their list, and a push to their phone when they allow group/emergency push).
+ *
+ * An SOS or check-in never reaches a member in a block with the sender, live
+ * or as a notification (services/blockService.js): the frame carries where
+ * the sender is.
  */
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -123,11 +128,12 @@ const buildGroupEventHandlers = ({
   /**
    * The caller's active membership, with the names the frames and notification
    * copy need. The JWT carries only { id, email, role }, so req.user.name is
-   * not available and the sender's name is read here.
+   * not available and the sender's name is read here. blocked_with lists the
+   * people in a block with the caller.
    */
   const loadMembership = async (groupId, userId) => {
     const result = await query(
-      `SELECT g.group_name, u.name AS user_name
+      `SELECT g.group_name, u.name AS user_name, ARRAY${blockedWithSubquery('$2')} AS blocked_with
          FROM group_members gm
          JOIN groups g ON g.id = gm.group_id
          JOIN users u ON u.id = gm.user_id
@@ -137,25 +143,32 @@ const buildGroupEventHandlers = ({
     const row = result.rows[0];
     // Notification rows outlive the frame, so the stored copy must never read
     // "SOS from default" or "SOS from " for an account without a real name.
-    return row ? { ...row, user_name: displayName(row.user_name) } : null;
+    return row
+      ? { ...row, user_name: displayName(row.user_name), blocked_with: idList(row.blocked_with) }
+      : null;
   };
 
   /**
    * Broadcasts and returns how many OTHER members were reached live; the
    * sender's own socket receives the frame too and is not counted.
    */
-  const broadcastToOthers = (groupId, senderId, frame) => {
+  const broadcastToOthers = (groupId, senderId, frame, excludeUserIds = []) => {
     const senderOnline = isMemberConnected(groupId, senderId);
-    const sent = broadcastToGroup(groupId, frame);
+    const sent = broadcastToGroup(groupId, frame, excludeUserIds);
     return Math.max(0, sent - (senderOnline ? 1 : 0));
   };
 
-  /** Active members other than [userId]. Never throws; null when the read failed. */
-  const loadOtherActiveMemberIds = async (groupId, userId) => {
+  /**
+   * Active members other than [userId]. With [skipBlocked], members in a block
+   * with [userId] are left out too. Never throws; null when the read failed.
+   */
+  const loadOtherActiveMemberIds = async (groupId, userId, { skipBlocked = false } = {}) => {
     try {
       const result = await query(
         `SELECT user_id FROM group_members
-          WHERE group_id = $1 AND status = 'active' AND user_id <> $2`,
+          WHERE group_id = $1 AND status = 'active' AND user_id <> $2${
+            skipBlocked ? `
+            AND ${notBlockedBetween('$2', 'user_id')}` : ''}`,
         [groupId, userId]
       );
       return result.rows.map((row) => row.user_id);
@@ -188,7 +201,7 @@ const buildGroupEventHandlers = ({
    * the notification only says who raised it and in which group.
    */
   const notifySosToMembers = async (groupId, senderId, senderName, groupName) =>
-    notifyMembers(groupId, await loadOtherActiveMemberIds(groupId, senderId), 'Group SOS', {
+    notifyMembers(groupId, await loadOtherActiveMemberIds(groupId, senderId, { skipBlocked: true }), 'Group SOS', {
       type: 'emergency',
       category: 'emergency',
       title: truncate(`SOS from ${senderName}`, TITLE_MAX_LENGTH),
@@ -201,7 +214,7 @@ const buildGroupEventHandlers = ({
    * still reaches them later. Like the SOS, it carries no coordinates.
    */
   const notifyCheckInToMembers = async (groupId, senderId, senderName, groupName) =>
-    notifyMembers(groupId, await loadOtherActiveMemberIds(groupId, senderId), 'Group check-in', {
+    notifyMembers(groupId, await loadOtherActiveMemberIds(groupId, senderId, { skipBlocked: true }), 'Group check-in', {
       type: 'group',
       category: 'group',
       title: truncate(`${senderName} checked in`, TITLE_MAX_LENGTH),
@@ -249,7 +262,7 @@ const buildGroupEventHandlers = ({
       };
       if (note !== undefined) frame.note = note;
 
-      const deliveredLive = broadcastToOthers(id, req.user.id, frame);
+      const deliveredLive = broadcastToOthers(id, req.user.id, frame, member.blocked_with);
       const notified = await notifySosToMembers(id, req.user.id, member.user_name, member.group_name);
 
       return success(res, { delivered_live: deliveredLive, notified }, 'SOS sent to the group');
@@ -289,7 +302,7 @@ const buildGroupEventHandlers = ({
       }
       frame.at = toIsoTimestamp(body.at, receivedAt);
 
-      const deliveredLive = broadcastToOthers(id, req.user.id, frame);
+      const deliveredLive = broadcastToOthers(id, req.user.id, frame, member.blocked_with);
       // Only a check-in is saved for later; a cancellation is live-only.
       const notified = body.checked_in
         ? await notifyCheckInToMembers(id, req.user.id, member.user_name, member.group_name)

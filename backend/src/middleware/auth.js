@@ -1,22 +1,57 @@
 const { verifyToken } = require('../utils/jwt');
 const { query } = require('../config/db');
 const { unauthorized, forbidden, error } = require('../utils/response');
+const { sessionService } = require('../services/sessionService');
 
-const authenticate = (req, res, next) => {
+const SIGNED_OUT = 'You have been signed out. Please sign in again.';
+
+/**
+ * Accepts a valid token only while the session it names (claim "sid") has not
+ * been signed out; see services/sessionService.js. Every sign-in path issues
+ * a sid. A token without one cannot be signed out from anywhere, so it is
+ * refused with the same 401 as a signed-out session: the app signs out and
+ * the person signs in again, getting a token that names its session.
+ *
+ * [isSessionActive] is injectable for tests.
+ */
+const buildAuthenticate = ({ isSessionActive }) => async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return unauthorized(res, 'Access token is required');
   }
 
   const token = authHeader.split(' ')[1];
+  let decoded;
   try {
-    const decoded = verifyToken(token);
-    req.user = decoded;
-    next();
+    decoded = verifyToken(token);
   } catch (err) {
     return unauthorized(res, 'Invalid or expired token');
   }
+
+  if (decoded.sid === undefined) {
+    return unauthorized(res, SIGNED_OUT);
+  }
+
+  let active;
+  try {
+    active = await isSessionActive({ sessionId: decoded.sid, userId: decoded.id });
+  } catch (err) {
+    console.error('Session check error:', err.message);
+    // Fail closed: a signed-out session must not come back because the
+    // database could not be asked.
+    return error(res, 'Could not check your sign-in. Please try again.', 503);
+  }
+  if (!active) {
+    return unauthorized(res, SIGNED_OUT);
+  }
+
+  req.user = decoded;
+  return next();
 };
+
+const authenticate = buildAuthenticate({
+  isSessionActive: (args) => sessionService().isSessionActive(args),
+});
 
 const requireAdmin = (req, res, next) => {
   if (!req.user || req.user.role !== 'admin') {
@@ -97,6 +132,7 @@ const requireResponder = async (req, res, next) => {
 
 module.exports = {
   authenticate,
+  buildAuthenticate,
   requireAdmin,
   requireResponder,
   resolveResponderAccess,

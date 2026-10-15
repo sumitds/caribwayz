@@ -10,13 +10,15 @@ const MAX_RADIUS_METERS = 50000;
  * Builds the handler with its dependencies passed in, so tests can supply a
  * fake query and dataset. The module exports one wired to the real database.
  */
-const buildProviderHandlers = ({ query, loadDataset, findNearby }) => {
+const buildProviderHandlers = ({ query, loadDataset, findNearby, isDatasetLoaded }) => {
   /**
    * GET /providers?key=roadside_towing&lat=..&lng=..&radius=5000
    *
    * covered tells the app whether this answer is authoritative. Inside a
    * territory CaribWayz has data for, an empty list really means nothing is
-   * mapped nearby. Outside them (covered: false) the app asks Overpass itself.
+   * mapped nearby. Outside them, and inside them until the table holds this
+   * dataset version (seeding runs after the server starts), covered is false
+   * and the app asks Overpass itself.
    */
   const getProviders = async (req, res) => {
     try {
@@ -46,6 +48,10 @@ const buildProviderHandlers = ({ query, loadDataset, findNearby }) => {
         return success(res, { covered: false, territory: null, elements: [] });
       }
 
+      if (!(await isDatasetLoaded(query, dataset))) {
+        return success(res, { covered: false, territory, elements: [] });
+      }
+
       const elements = await findNearby(query, { key, latitude, longitude, radiusMeters });
       return success(res, {
         covered: true,
@@ -66,6 +72,7 @@ const { getProviders } = buildProviderHandlers({
   query: db.query,
   loadDataset: () => roadside.loadDataset(),
   findNearby: roadside.findNearby,
+  isDatasetLoaded: roadside.isDatasetLoaded,
 });
 
 module.exports = { buildProviderHandlers, getProviders };

@@ -18,7 +18,7 @@ const { success, error, notFound, forbidden } = require('../utils/response');
 const UNDEFINED_TABLE = '42P01';
 
 /** Fields of users that are never exported: credentials and one-time codes. */
-const PROFILE_COLUMNS = `id, name, email, phone, emergency_contact, user_type, auth_provider,
+const PROFILE_COLUMNS = `id, name, email, phone, emergency_contact, emergency_contacts, user_type, auth_provider,
   profile_image, role, status, is_responder, responder_approved_at, created_at, updated_at`;
 
 /**
@@ -39,10 +39,15 @@ const EXPORT_SECTIONS = [
        gm.current_longitude AS my_last_longitude, gm.location_updated_at AS my_location_updated_at
      FROM group_members gm JOIN groups g ON g.id = gm.group_id
      WHERE gm.user_id = $1 ORDER BY gm.joined_at`],
+  // Only whom this person blocked. Who blocked them is the other person's data.
+  ['blocked_people', 'SELECT blocked_id AS user_id, created_at AS blocked_at FROM user_blocks WHERE blocker_id = $1 ORDER BY created_at'],
   ['notifications', 'SELECT id, title, message, type, reference_id, is_read, created_at FROM notifications WHERE user_id = $1 ORDER BY created_at'],
   ['businesses_created', 'SELECT * FROM businesses WHERE created_by = $1 ORDER BY created_at'],
   ['sponsorships', 'SELECT * FROM sponsorships WHERE user_id = $1 ORDER BY created_at'],
   ['payouts', 'SELECT id, amount, method, account_detail, status, requested_at, processed_at, note, created_at FROM payouts WHERE user_id = $1 ORDER BY created_at'],
+  ['weather_alert_area', 'SELECT latitude, longitude, updated_at FROM user_alert_areas WHERE user_id = $1'],
+  ['weather_alerts_sent', 'SELECT alert_key, sent_at FROM weather_alert_deliveries WHERE user_id = $1 ORDER BY sent_at'],
+  ['sign_ins', 'SELECT method, platform, created_at, expires_at, revoked_at FROM user_sessions WHERE user_id = $1 ORDER BY created_at'],
 ];
 
 /** The literal a caller must send to delete, so a stray request cannot. */

@@ -1,4 +1,4 @@
-const { test, describe, before, after } = require('node:test');
+const { test, describe, before, after, mock } = require('node:test');
 const assert = require('node:assert/strict');
 
 // A fixed key keeps utils/jwt from warning about a per-process random secret.
@@ -8,6 +8,12 @@ process.env.JWT_SECRET = 'test-only-secret-for-emergency-rate-limit-0123456789';
 const express = require('express');
 const emergencyRoutes = require('../src/routes/emergency');
 const { generateToken } = require('../src/utils/jwt');
+const { sessionService } = require('../src/services/sessionService');
+
+// Every token names its sign-in session and authenticate checks it is still
+// live. These tests have no database, so every session counts as live.
+const SESSION_ID = '0b9c8d7e-6f5a-4b3c-8d2e-1f0a9b8c7d6e';
+mock.method(sessionService(), 'isSessionActive', async () => true);
 
 /**
  * Every emergency rings every responder's phone, so POST /emergency is limited
@@ -18,8 +24,8 @@ const { generateToken } = require('../src/utils/jwt');
 describe('emergency rate limit', () => {
   let server;
   let baseUrl;
-  const caller = generateToken({ id: '41111111-2222-4333-8444-555555555555', email: 'e1@example.com', role: 'user' });
-  const other = generateToken({ id: '51111111-2222-4333-8444-555555555555', email: 'e2@example.com', role: 'user' });
+  const caller = generateToken({ id: '41111111-2222-4333-8444-555555555555', email: 'e1@example.com', role: 'user', sid: SESSION_ID });
+  const other = generateToken({ id: '51111111-2222-4333-8444-555555555555', email: 'e2@example.com', role: 'user', sid: SESSION_ID });
 
   before(async () => {
     const app = express();

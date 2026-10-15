@@ -103,6 +103,19 @@ const seedRoadsidePlaces = async (query, dataset = null) => {
 };
 
 /**
+ * True once roadside_places holds every place of this dataset version. Seeding
+ * runs after the server starts listening, so until then an empty answer would
+ * wrongly read as "nothing mapped nearby".
+ */
+const isDatasetLoaded = async (query, dataset) => {
+  const result = await query(
+    'SELECT COUNT(*)::int AS n FROM roadside_places WHERE dataset_version = $1',
+    [dataset.version]
+  );
+  return Boolean(result.rows[0]) && result.rows[0].n === dataset.places.length;
+};
+
+/**
  * Places of the lookup's kinds within radiusMeters, nearest first, shaped like
  * Overpass elements so the app reads them with the parser it already has.
  */
@@ -149,5 +162,6 @@ module.exports = {
   loadDataset,
   territoryFor,
   seedRoadsidePlaces,
+  isDatasetLoaded,
   findNearby,
 };

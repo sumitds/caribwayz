@@ -63,6 +63,11 @@ const getNearbyReports = async (req, res) => {
   }
 };
 
+/** How a report type reads in a sentence. The app calls construction reports
+ * "Roadworks", so the server says the same. */
+const reportTypeLabel = (type) =>
+  type === 'construction' ? 'roadworks' : String(type).replace(/_/g, ' ');
+
 const confirmReport = async (req, res) => {
   try {
     const { id } = req.params;
@@ -105,7 +110,7 @@ const confirmReport = async (req, res) => {
       type: 'report',
       category: 'reports',
       title: 'Your report was confirmed',
-      message: `Another driver confirmed your ${String(confirmed.type).replace(/_/g, ' ')} report. Thanks for keeping the road safe.`,
+      message: `Another driver confirmed your ${reportTypeLabel(confirmed.type)} report. Thanks for keeping the road safe.`,
       reference_id: confirmed.id,
     });
 
@@ -162,4 +167,4 @@ const getReportHistory = async (req, res) => {
   }
 };
 
-module.exports = { submitReport, getNearbyReports, confirmReport, getReportHistory };
+module.exports = { submitReport, getNearbyReports, confirmReport, getReportHistory, reportTypeLabel };

@@ -62,7 +62,7 @@ describe('emergency desk over HTTP against Postgres', { skip: !process.env.TEST_
     delete process.env.DATABASE_URL;
     // Everything that captured the db module at load is loaded fresh, so it
     // talks to the throwaway database.
-    for (const mod of ['config/db', 'middleware/auth', 'services/notificationService', 'controllers/emergencyController', 'routes/emergency', 'migrations/migrate']) {
+    for (const mod of ['config/db', 'services/sessionService', 'middleware/auth', 'services/notificationService', 'controllers/emergencyController', 'routes/emergency', 'migrations/migrate']) {
       delete require.cache[require.resolve(path.join(__dirname, '../src', mod))];
     }
     await require('../src/migrations/migrate')();
@@ -83,7 +83,13 @@ describe('emergency desk over HTTP against Postgres', { skip: !process.env.TEST_
     await mk('driver', 'Dee Driver', false);
 
     const { generateToken } = require('../src/utils/jwt');
-    for (const [k, id] of Object.entries(users)) tokens[k] = generateToken({ id, email: `${k}@desk.test`, role: 'user' });
+    // Every token names a recorded sign-in session; authenticate refuses one that does not.
+    for (const [k, id] of Object.entries(users)) {
+      const sid = require('node:crypto').randomUUID();
+      await q(`INSERT INTO user_sessions (id, user_id, method, platform, expires_at)
+               VALUES ($1, $2, 'email', 'android', NOW() + INTERVAL '1 day')`, [sid, id]);
+      tokens[k] = generateToken({ id, email: `${k}@desk.test`, role: 'user', sid });
+    }
 
     const express = require('express');
     const app = express();

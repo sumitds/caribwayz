@@ -219,8 +219,7 @@ const getDashboardStats = async (req, res) => {
  * Disaster, hazard, emergency and road-closure notices are safety alerts and go
  * out under "emergency", so turning off "App updates" can never silence a
  * hurricane warning. "info" is a general notice from the CaribWayz team.
- * "promotion" is the one kind a person must opt in to; the admin panel does not
- * offer it yet.
+ * "promotion" is the one kind a person must opt in to (see deliverBroadcast).
  */
 const BROADCAST_CATEGORIES = Object.freeze({
   disaster: 'emergency',
@@ -233,7 +232,16 @@ const BROADCAST_CATEGORIES = Object.freeze({
 const BROADCAST_TYPES = Object.keys(BROADCAST_CATEGORIES);
 
 /**
- * Sends a broadcast to every active account.
+ * Who a promotion goes to: active accounts that turned promotional
+ * notifications on. Nobody else gets it, not even in their notification list.
+ */
+const PROMOTION_RECIPIENTS_SQL = `SELECT u.id FROM users u
+   JOIN user_preferences p ON p.user_id = u.id
+  WHERE u.status = 'active' AND p.push_promotions = TRUE`;
+
+/**
+ * Sends a broadcast to every active account, or for a promotion to those who
+ * opted in. Safety broadcasts ignore the promotions switch.
  *
  * Accounts carry no home parish, so a parish broadcast cannot be targeted; it
  * goes to everyone with the parish named first, so a driver elsewhere can tell
@@ -242,7 +250,10 @@ const BROADCAST_TYPES = Object.keys(BROADCAST_CATEGORIES);
 const deliverBroadcast = async (broadcast) => {
   let recipients;
   try {
-    recipients = (await query(`SELECT id FROM users WHERE status = 'active'`)).rows.map((row) => row.id);
+    const sql = broadcast.type === 'promotion'
+      ? PROMOTION_RECIPIENTS_SQL
+      : `SELECT id FROM users WHERE status = 'active'`;
+    recipients = (await query(sql)).rows.map((row) => row.id);
   } catch (err) {
     console.error(`Broadcast ${broadcast.id}: reading recipients failed:`, err.message);
     return -1;

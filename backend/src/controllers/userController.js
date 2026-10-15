@@ -2,11 +2,14 @@ const bcrypt = require('bcryptjs');
 const { query } = require('../config/db');
 const { getStorage } = require('../config/firebase');
 const { success, error, notFound } = require('../utils/response');
+const weatherAlerts = require('../services/weatherAlertService');
+const { isSessionId, notifySessionsRevoked } = require('../services/sessionService');
+const { normalizeContactPhone } = require('../utils/phone');
 
 const getProfile = async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, name, email, phone, emergency_contact, user_type, profile_image, role, status, created_at
+      `SELECT id, name, email, phone, emergency_contact, emergency_contacts, user_type, profile_image, role, status, created_at
        FROM users WHERE id = $1`,
       [req.user.id]
     );
@@ -57,20 +60,43 @@ const updateProfile = async (req, res) => {
         return error(res, 'Current password is incorrect', 400);
       }
 
+      // Every other device is signed out before the password changes; this
+      // one stays signed in. A token from before sign-in history has no
+      // session to keep, so every recorded session ends.
+      const keep = isSessionId(req.user.sid) ? req.user.sid : null;
+      const revoked = await query(
+        `UPDATE user_sessions SET revoked_at = NOW()
+          WHERE user_id = $1 AND revoked_at IS NULL AND ($2::uuid IS NULL OR id <> $2::uuid)
+          RETURNING id`,
+        [userId, keep]
+      );
+      notifySessionsRevoked(revoked.rows.map((r) => r.id));
+
       const password_hash = await bcrypt.hash(new_password, 12);
       await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [password_hash, userId]);
     }
 
+    // The route has already refused a number that is not one. Edit Profile's
+    // Emergency Contact is the first trusted contact: it replaces the first
+    // entry of the list, and the same number further down is dropped.
+    const primaryContact = emergency_contact ? normalizeContactPhone(emergency_contact) : null;
+
     const result = await query(
       `UPDATE users
-       SET name              = COALESCE($1, name),
-           phone             = COALESCE($2, phone),
-           emergency_contact = COALESCE($3, emergency_contact),
-           profile_image     = COALESCE($4, profile_image),
-           updated_at        = NOW()
+       SET name               = COALESCE($1, name),
+           phone              = COALESCE($2, phone),
+           emergency_contact  = COALESCE($3::text, emergency_contact),
+           emergency_contacts = CASE WHEN $3::text IS NULL THEN emergency_contacts
+             ELSE ARRAY[$3::text] || ARRAY(
+               SELECT c FROM unnest(emergency_contacts[2:]) WITH ORDINALITY AS t(c, n)
+                WHERE regexp_replace(c, '[^0-9]', '', 'g') <> regexp_replace($3::text, '[^0-9]', '', 'g')
+                ORDER BY n)
+           END,
+           profile_image      = COALESCE($4, profile_image),
+           updated_at         = NOW()
        WHERE id = $5
-       RETURNING id, name, email, phone, emergency_contact, user_type, profile_image, role, status`,
-      [name || null, phone || null, emergency_contact || null, profile_image_url, userId]
+       RETURNING id, name, email, phone, emergency_contact, emergency_contacts, user_type, profile_image, role, status`,
+      [name || null, phone || null, primaryContact, profile_image_url, userId]
     );
 
     return success(res, { user: result.rows[0] }, 'Profile updated');
@@ -99,7 +125,7 @@ const updatePreferences = async (req, res) => {
     const {
       alert_police, alert_construction, alert_hazards,
       alert_traffic, alert_business, alert_tourism, priority_level,
-      push_emergency, push_group, push_reports, push_app_updates, push_promotions,
+      push_emergency, push_group, push_reports, push_app_updates, push_promotions, push_weather,
     } = req.body;
 
     // Every field is optional: an omitted one keeps its stored value, so the
@@ -118,15 +144,27 @@ const updatePreferences = async (req, res) => {
            push_reports = COALESCE($11, push_reports),
            push_app_updates = COALESCE($12, push_app_updates),
            push_promotions = COALESCE($13, push_promotions),
+           push_weather = COALESCE($14, push_weather),
            updated_at = NOW()
        WHERE user_id = $8
        RETURNING *`,
       [alert_police, alert_construction, alert_hazards, alert_traffic,
        alert_business, alert_tourism, priority_level, req.user.id,
-       push_emergency, push_group, push_reports, push_app_updates, push_promotions]
+       push_emergency, push_group, push_reports, push_app_updates, push_promotions, push_weather]
     );
     // Without this the app would be told its switch was saved when nothing was.
     if (result.rows.length === 0) return notFound(res, 'Preferences not found');
+    // The rough area is kept only for weather alerts, so it goes with them.
+    // The switch is already saved, so a failure here is logged and the answer
+    // still says what was saved; the area is no longer used for alerts
+    // either way, as recipients skip anyone with push_weather off.
+    if (push_weather === false) {
+      try {
+        await weatherAlerts.clearAlertArea(req.user.id);
+      } catch (err) {
+        console.error(`Clearing the weather alert area failed (user ${req.user.id}):`, err.message);
+      }
+    }
     return success(res, { preferences: result.rows[0] }, 'Preferences updated');
   } catch (err) {
     console.error('Update preferences error:', err);
@@ -214,7 +252,26 @@ const removeDeviceToken = async (req, res) => {
   }
 };
 
+/**
+ * Records the rough area the app is in, for weather alerts. Stored only while
+ * the caller's weather alerts are on (rounded to about 11 km); otherwise
+ * nothing is kept and stored is false.
+ */
+const updateAlertArea = async (req, res) => {
+  try {
+    const stored = await weatherAlerts.setAlertArea(req.user.id, req.body.latitude, req.body.longitude);
+    return success(
+      res,
+      { stored },
+      stored ? 'Area saved for weather alerts' : 'Weather alerts are off, so the area was not saved'
+    );
+  } catch (err) {
+    console.error(`Update alert area error (user ${req.user && req.user.id}):`, err.message);
+    return error(res, 'Failed to save your area for weather alerts', 500);
+  }
+};
+
 module.exports = {
   getProfile, updateProfile, getPreferences, updatePreferences,
-  registerDeviceToken, removeDeviceToken, MAX_DEVICES_PER_USER,
+  registerDeviceToken, removeDeviceToken, updateAlertArea, MAX_DEVICES_PER_USER,
 };
