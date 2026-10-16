@@ -1,12 +1,14 @@
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { query, getClient } = require('../config/db');
 const firebase = require('../config/firebase');
 const emailService = require('../services/emailService');
-const { generateToken } = require('../utils/jwt');
 const { success, created, error, unauthorized } = require('../utils/response');
 const { isPlaceholderName, normalizeName } = require('../utils/displayName');
+const { generateCode: generateSixDigitCode, digestMatches, sha256Hex } = require('../utils/oneTimeCode');
+const { sessionService, clientPlatform } = require('../services/sessionService');
+const { buildTwoFactorService } = require('../services/twoFactorService');
+const { normalizeContactPhone } = require('../utils/phone');
 
 const register = async (req, res) => {
   try {
@@ -22,11 +24,16 @@ const register = async (req, res) => {
 
     const password_hash = await bcrypt.hash(password, 12);
 
+    // The sign-up contact is the first trusted contact texted on an SOS. One
+    // that is not a phone number is still stored as typed, as it always was,
+    // but is not put on the list of numbers to text.
+    const firstContact = normalizeContactPhone(emergency_contact);
+
     const result = await query(
-      `INSERT INTO users (name, email, phone, emergency_contact, user_type, password_hash, auth_provider, role)
-       VALUES ($1, $2, $3, $4, $5, $6, 'email', 'user')
-       RETURNING id, name, email, phone, emergency_contact, user_type, role, status, is_responder, created_at`,
-      [name, email, phone, emergency_contact, user_type || 'CaribDrivers', password_hash]
+      `INSERT INTO users (name, email, phone, emergency_contact, emergency_contacts, user_type, password_hash, auth_provider, role)
+       VALUES ($1, $2, $3, $4, $5::text[], $6, $7, 'email', 'user')
+       RETURNING id, name, email, phone, emergency_contact, emergency_contacts, user_type, role, status, is_responder, created_at`,
+      [name, email, phone, emergency_contact, firstContact ? [firstContact] : [], user_type || 'CaribDrivers', password_hash]
     );
 
     await query(
@@ -35,7 +42,7 @@ const register = async (req, res) => {
     );
 
     const user = result.rows[0];
-    const token = generateToken({ id: user.id, email: user.email, role: user.role });
+    const token = await sessionService().startSession({ user, method: 'email', platform: clientPlatform(req) });
 
     return created(res, { user, token }, 'Registration successful');
   } catch (err) {
@@ -44,45 +51,10 @@ const register = async (req, res) => {
   }
 };
 
-const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const result = await query(
-      `SELECT id, name, email, phone, emergency_contact, user_type, password_hash, role, status, is_responder, profile_image, created_at
-       FROM users WHERE email = $1 AND auth_provider = 'email'`,
-      [email]
-    );
-
-    if (result.rows.length === 0) {
-      return unauthorized(res, 'Invalid email or password');
-    }
-
-    const user = result.rows[0];
-
-    if (user.status === 'suspended') {
-      return error(res, 'Your account has been suspended', 403);
-    }
-
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
-      return unauthorized(res, 'Invalid email or password');
-    }
-
-    const { password_hash, ...safeUser } = user;
-    const token = generateToken({ id: user.id, email: user.email, role: user.role });
-
-    return success(res, { user: safeUser, token }, 'Login successful');
-  } catch (err) {
-    console.error('Login error:', err);
-    return error(res, 'Login failed', 500);
-  }
-};
-
 // ── Sign-in with Firebase and password reset ───────────────────────────────
 
 /** Columns returned for a signed-in user: the same shape /login returns. */
-const SAFE_USER_COLUMNS = ['id', 'name', 'email', 'phone', 'emergency_contact', 'user_type',
+const SAFE_USER_COLUMNS = ['id', 'name', 'email', 'phone', 'emergency_contact', 'emergency_contacts', 'user_type',
   'role', 'status', 'is_responder', 'profile_image', 'created_at'];
 const userColumns = (alias) => SAFE_USER_COLUMNS.map((c) => (alias ? `${alias}.${c}` : c)).join(', ');
 
@@ -112,6 +84,16 @@ const MESSAGES = {
   RESET_EXHAUSTED: 'Too many incorrect codes. Please request a new one.',
   RESET_LOCKED: 'Too many incorrect codes. Please try again tomorrow.',
   RESET_DONE: 'Password reset successfully',
+  INVALID_LOGIN: 'Invalid email or password',
+  // Read by clients that do not know the code step (older app builds, the
+  // admin panel); the current app shows its own code screen instead.
+  TWO_FACTOR_REQUIRED: 'Two-step sign-in is on for this account. Enter the code we emailed you in the latest CaribWayz app.',
+  TWO_FACTOR_UNAVAILABLE: "We can't send sign-in codes right now. Please try again later.",
+  TWO_FACTOR_SEND_FAILED: "We couldn't send your sign-in code. Please try again in a few minutes.",
+  TWO_FACTOR_LIMITED: 'Too many sign-in codes requested. Please wait an hour and try again.',
+  TWO_FACTOR_INVALID: 'This code is invalid or has expired. Please sign in again to get a new one.',
+  TWO_FACTOR_EXHAUSTED: 'Too many incorrect codes. Please sign in again to get a new one.',
+  TWO_FACTOR_LOCKED: 'Too many incorrect codes. Please try again tomorrow.',
 };
 
 /** Postgres unique_violation. */
@@ -145,23 +127,28 @@ const RESET_GUESS_WINDOW_MS = 24 * 60 * 60 * 1000;
  * for two accounts never hashes alike, and a copied hash is useless for any
  * other account.
  */
-const hashResetCode = (userId, code) =>
-  crypto.createHash('sha256').update(`${userId}:${code}`).digest('hex');
+const hashResetCode = (userId, code) => sha256Hex(`${userId}:${code}`);
 
 /** Constant-time comparison of two hex digests. False for anything malformed. */
-const resetCodeMatches = (candidateHex, storedHex) => {
-  if (typeof candidateHex !== 'string' || typeof storedHex !== 'string') return false;
-  const a = Buffer.from(candidateHex, 'hex');
-  const b = Buffer.from(storedHex, 'hex');
-  return a.length === 32 && a.length === b.length && crypto.timingSafeEqual(a, b);
-};
+const resetCodeMatches = digestMatches;
 
 /** A uniformly random six-digit code, leading zeros kept. */
-const generateResetCode = () => String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+const generateResetCode = generateSixDigitCode;
 
 /** A 4xx whose data.code tells the app which recovery to offer. */
-const failWithCode = (res, statusCode, message, code) =>
-  res.status(statusCode).json({ success: false, message, data: { code } });
+const failWithCode = (res, statusCode, message, code, extra = {}) =>
+  res.status(statusCode).json({ success: false, message, data: { ...extra, code } });
+
+/**
+ * Enough of an address for the person to recognise it, and no more:
+ * "asha@example.com" becomes "a•••@example.com".
+ */
+const maskEmail = (email) => {
+  if (typeof email !== 'string') return null;
+  const at = email.lastIndexOf('@');
+  if (at < 1) return null;
+  return `${email[0]}•••${email.slice(at)}`;
+};
 
 const isNonEmptyString = (v) => typeof v === 'string' && v.trim() !== '';
 
@@ -174,28 +161,49 @@ const usablePhotoUrl = (url) =>
  * @param {(text: string, params?: any[]) => Promise<{rows: any[], rowCount: number}>} deps.query
  * @param {() => Promise<{query: Function, release: Function}>} deps.getClient
  * @param {() => ({verifyIdToken: (t: string) => Promise<object>}|null)} deps.getAuth firebase-admin auth, or null when not configured
- * @param {(payload: object) => string} deps.generateToken
  * @param {() => boolean} deps.isEmailConfigured
  * @param {(args: {toEmail: string, code: string, expiresInMinutes: number}) => Promise<void>} deps.sendPasswordResetCode
  * @param {(plain: string) => Promise<string>} [deps.hashPassword]
  * @param {() => string} [deps.generateCode]
  * @param {(task: () => Promise<void>) => void} [deps.runInBackground]
  * @param {() => Date} [deps.now]
+ * @param {(args: {user: object, method: string, platform: string}) => Promise<string>} [deps.startSession]
+ *   records the sign-in and returns its token (services/sessionService.js).
+ *   Every token comes from here: one naming no session is refused on its
+ *   first use, so without it a sign-in fails rather than issue one.
+ * @param {{issueCode: Function, verifyCode: Function}} [deps.twoFactor]
+ *   services/twoFactorService.js. /login refuses an account with two-step
+ *   sign-in on when it is missing, rather than skipping the second step.
+ * @param {(plain: string, hash: string) => Promise<boolean>} [deps.comparePassword]
+ * @param {(args: {sessionId: string, userId: string}) => Promise<boolean>} [deps.revokeSession]
+ *   ends the caller's session at /logout.
+ * @param {(args: {userId: string}) => Promise<number>} [deps.revokeAllSessions]
+ *   signs the account out everywhere when a reset code is accepted.
  */
 const buildAuthHandlers = ({
   query,
   getClient,
   getAuth,
-  generateToken,
   isEmailConfigured,
   sendPasswordResetCode,
   hashPassword = (plain) => bcrypt.hash(plain, 12),
   generateCode = generateResetCode,
   runInBackground = (task) => { task(); },
   now = () => new Date(),
+  startSession = null,
+  revokeSession = null,
+  revokeAllSessions = null,
+  twoFactor = null,
+  comparePassword = (plain, hash) => bcrypt.compare(plain, hash),
 }) => {
-  const signedIn = (res, user, isNewUser) => {
-    const token = generateToken({ id: user.id, email: user.email, role: user.role });
+  /** The token for a sign-in by [method], recorded as a session. */
+  const tokenFor = async (req, user, method) => {
+    if (!startSession) throw new Error('buildAuthHandlers: startSession is required to sign anyone in');
+    return startSession({ user, method, platform: clientPlatform(req) });
+  };
+
+  const signedIn = async (req, res, user, isNewUser, method) => {
+    const token = await tokenFor(req, user, method);
     return success(res, { user, token, is_new_user: isNewUser }, 'Login successful');
   };
 
@@ -213,9 +221,9 @@ const buildAuthHandlers = ({
    * Signs in a user found by firebase_uid: a returning user, or the loser of a
    * race between two first sign-ins of the same person.
    */
-  const signInExisting = (res, user) => {
+  const signInExisting = (req, res, user, method) => {
     if (user.status === 'suspended') return error(res, MESSAGES.SUSPENDED, 403);
-    return signedIn(res, user, false);
+    return signedIn(req, res, user, false, method);
   };
 
   const verifyFirebaseToken = async (idToken, expectedProvider) => {
@@ -287,7 +295,7 @@ const buildAuthHandlers = ({
 
         // 1. A returning user: the identity is already known.
         const known = await findByFirebaseUid(uid);
-        if (known) return signInExisting(res, known);
+        if (known) return signInExisting(req, res, known, provider);
 
         // What the verified token says. Email, name and photo never come from
         // the request body; only a name for a brand-new account may.
@@ -349,14 +357,14 @@ const buildAuthHandlers = ({
           // before the identity, so with an email the loser trips
           // users_email_key, not user_identities_pkey: look the uid up either way.
           const raced = await findByFirebaseUid(uid);
-          if (raced) return signInExisting(res, raced);
+          if (raced) return signInExisting(req, res, raced, provider);
           if (err.constraint === 'users_email_key') {
             return failWithCode(res, 409, MESSAGES.EMAIL_IN_USE, 'EMAIL_IN_USE');
           }
           throw err;
         }
 
-        return signedIn(res, user, true);
+        return signedIn(req, res, user, true, provider);
       } catch (err) {
         console.error(`${provider} sign-in error:`, err);
         return error(res, 'Sign-in failed', 500);
@@ -492,6 +500,13 @@ const buildAuthHandlers = ({
         return error(res, `Incorrect code. ${left} ${left === 1 ? 'attempt' : 'attempts'} left.`, 400);
       }
 
+      // Whoever may have had this account is signed out everywhere before the
+      // password changes: a reset is how a person takes their account back.
+      // If this fails nothing has changed yet and the person tries again.
+      if (revokeAllSessions) {
+        await revokeAllSessions({ userId: row.id });
+      }
+
       const password_hash = await hashPassword(new_password);
 
       // Consumes the code. Conditional on it still being the same code, so
@@ -516,7 +531,128 @@ const buildAuthHandlers = ({
     }
   };
 
+  // ── Email and password, with the optional second step ─────────────────────
+
+  const login = async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      const result = await query(
+        `SELECT ${userColumns()}, password_hash, two_factor_enabled
+           FROM users WHERE email = $1 AND auth_provider = 'email'`,
+        [email]
+      );
+
+      if (result.rows.length === 0) {
+        return unauthorized(res, MESSAGES.INVALID_LOGIN);
+      }
+
+      const { password_hash: passwordHash, two_factor_enabled: twoFactorEnabled, ...user } = result.rows[0];
+
+      if (user.status === 'suspended') {
+        return error(res, MESSAGES.SUSPENDED, 403);
+      }
+
+      const valid = await comparePassword(password, passwordHash);
+      if (!valid) {
+        return unauthorized(res, MESSAGES.INVALID_LOGIN);
+      }
+
+      if (twoFactorEnabled !== true) {
+        const token = await tokenFor(req, user, 'email');
+        return success(res, { user, token }, 'Login successful');
+      }
+
+      if (!twoFactor) {
+        // Never sign in without the second step the person asked for.
+        throw new Error('two-step sign-in is on for this account but no code service is wired');
+      }
+
+      const issued = await twoFactor.issueCode({ user, purpose: 'sign_in' });
+      switch (issued.status) {
+        case 'sent':
+          return failWithCode(res, 403, MESSAGES.TWO_FACTOR_REQUIRED, 'TWO_FACTOR_REQUIRED', {
+            challenge: issued.challenge,
+            email_hint: maskEmail(user.email),
+            expires_in_minutes: issued.expiresInMinutes,
+          });
+        case 'unavailable':
+          return failWithCode(res, 503, MESSAGES.TWO_FACTOR_UNAVAILABLE, 'TWO_FACTOR_UNAVAILABLE');
+        case 'send_failed':
+          return failWithCode(res, 503, MESSAGES.TWO_FACTOR_SEND_FAILED, 'TWO_FACTOR_SEND_FAILED');
+        case 'limited':
+          return failWithCode(res, 429, MESSAGES.TWO_FACTOR_LIMITED, 'TWO_FACTOR_LIMITED');
+        case 'locked':
+          return failWithCode(res, 429, MESSAGES.TWO_FACTOR_LOCKED, 'TWO_FACTOR_LOCKED');
+        default:
+          throw new Error(`unexpected two-step issue status ${issued.status}`);
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      return error(res, 'Login failed', 500);
+    }
+  };
+
+  /** The second step: the code emailed after a correct password. */
+  const verifyTwoFactorLogin = async (req, res) => {
+    try {
+      if (!twoFactor) throw new Error('no two-step code service is wired');
+      const { challenge, code } = req.body;
+
+      const checked = await twoFactor.verifyCode({ purpose: 'sign_in', challenge, code });
+      switch (checked.status) {
+        case 'ok':
+          break;
+        case 'wrong': {
+          const left = checked.attemptsLeft;
+          return failWithCode(res, 400, `Incorrect code. ${left} ${left === 1 ? 'attempt' : 'attempts'} left.`,
+            'TWO_FACTOR_WRONG', { attempts_left: left });
+        }
+        case 'exhausted':
+          return failWithCode(res, 400, MESSAGES.TWO_FACTOR_EXHAUSTED, 'TWO_FACTOR_EXHAUSTED');
+        case 'locked':
+          return failWithCode(res, 429, MESSAGES.TWO_FACTOR_LOCKED, 'TWO_FACTOR_LOCKED');
+        case 'invalid':
+          return failWithCode(res, 400, MESSAGES.TWO_FACTOR_INVALID, 'TWO_FACTOR_INVALID');
+        default:
+          throw new Error(`unexpected two-step verify status ${checked.status}`);
+      }
+
+      const found = await query(
+        `SELECT ${userColumns()} FROM users WHERE id = $1 AND auth_provider = 'email'`,
+        [checked.userId]
+      );
+      if (found.rows.length === 0) {
+        return failWithCode(res, 400, MESSAGES.TWO_FACTOR_INVALID, 'TWO_FACTOR_INVALID');
+      }
+      const user = found.rows[0];
+      if (user.status === 'suspended') return error(res, MESSAGES.SUSPENDED, 403);
+
+      const token = await tokenFor(req, user, 'email');
+      return success(res, { user, token }, 'Login successful');
+    } catch (err) {
+      console.error('Two-step sign-in error:', err);
+      return error(res, 'Login failed', 500);
+    }
+  };
+
+  /** Ends the session this token belongs to. */
+  const logout = async (req, res) => {
+    try {
+      if (revokeSession && req.user && req.user.sid !== undefined) {
+        await revokeSession({ sessionId: req.user.sid, userId: req.user.id });
+      }
+      return success(res, {}, 'Logged out successfully');
+    } catch (err) {
+      console.error('Logout error:', err);
+      return error(res, 'Could not sign you out. Please try again.', 500);
+    }
+  };
+
   return {
+    login,
+    verifyTwoFactorLogin,
+    logout,
     googleLogin: firebaseLogin('google'),
     facebookLogin: firebaseLogin('facebook'),
     phoneLogin: firebaseLogin('phone'),
@@ -525,23 +661,28 @@ const buildAuthHandlers = ({
   };
 };
 
-const { googleLogin, facebookLogin, phoneLogin, forgotPassword, verifyOtp } = buildAuthHandlers({
+const {
+  login, verifyTwoFactorLogin, logout, googleLogin, facebookLogin, phoneLogin, forgotPassword, verifyOtp,
+} = buildAuthHandlers({
   query,
   getClient,
   getAuth: firebase.getAuth,
-  generateToken,
   isEmailConfigured: emailService.isEmailConfigured,
   sendPasswordResetCode: emailService.sendPasswordResetCode,
+  startSession: (args) => sessionService().startSession(args),
+  revokeSession: (args) => sessionService().revokeSession(args),
+  revokeAllSessions: (args) => sessionService().revokeAllSessions(args),
+  twoFactor: buildTwoFactorService({
+    query,
+    isEmailConfigured: emailService.isEmailConfigured,
+    sendCode: emailService.sendTwoFactorCode,
+  }),
 });
-
-const logout = async (req, res) => {
-  // JWT is stateless — instruct client to delete the token
-  return success(res, {}, 'Logged out successfully');
-};
 
 module.exports = {
   register,
   login,
+  verifyTwoFactorLogin,
   forgotPassword,
   verifyOtp,
   logout,
@@ -553,6 +694,7 @@ module.exports = {
   resetCodeMatches,
   generateResetCode,
   MESSAGES,
+  maskEmail,
   RESET_MAX_ATTEMPTS,
   RESET_CODE_TTL_MINUTES,
   RESET_CODES_PER_WINDOW,

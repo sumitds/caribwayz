@@ -24,6 +24,8 @@ const adminRoutes = require('./src/routes/admin');
 const recordRoutes = require('./src/routes/records');
 const providerRoutes = require('./src/routes/providers');
 const { seedRoadsidePlaces } = require('./src/services/roadsidePlaces');
+const shelterRoutes = require('./src/routes/shelters');
+const { seedEmergencyShelters } = require('./src/services/emergencyShelters');
 const db = require('./src/config/db');
 
 require('./src/services/cronService');
@@ -74,6 +76,7 @@ app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/records', recordRoutes);
 app.use('/api/v1/providers', providerRoutes);
+app.use('/api/v1/shelters', shelterRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -97,4 +100,5 @@ runMigrations().then(() => {
   // After listening, so a slow first load never delays the health check.
   // Never throws; on failure the table keeps whatever it already held.
   seedRoadsidePlaces(db.query);
+  seedEmergencyShelters(db.query);
 });

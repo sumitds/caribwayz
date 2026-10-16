@@ -221,10 +221,10 @@ describe('notify: push', () => {
     const logged = captureConsole(t);
     const messaging = makeMessaging();
     const { service, db } = build({ messaging });
-    assert.equal(await service.notify([A], { ...PAYLOAD, category: 'weather' }), 1);
+    assert.equal(await service.notify([A], { ...PAYLOAD, category: 'horoscope' }), 1);
     assert.equal(db.of('tokens').length, 0);
     assert.equal(messaging.sent.length, 0);
-    assert.ok(logged.some((l) => l.includes('unknown category "weather"')));
+    assert.ok(logged.some((l) => l.includes('unknown category "horoscope"')));
   });
 
   test('more tokens than one FCM call allows are split into batches of 500', async () => {

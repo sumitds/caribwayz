@@ -20,7 +20,7 @@ const makeRes = () => {
   return res;
 };
 
-const handler = ({ rows = [], fail = false, calls = [] } = {}) =>
+const handler = ({ rows = [], fail = false, calls = [], loaded = true } = {}) =>
   buildProviderHandlers({
     query: async (text, params) => {
       calls.push({ text, params });
@@ -29,6 +29,7 @@ const handler = ({ rows = [], fail = false, calls = [] } = {}) =>
     },
     loadDataset: () => ({ version: 'v1', territories: TERRITORIES, places: [] }),
     findNearby: roadside.findNearby,
+    isDatasetLoaded: async () => loaded,
   }).getProviders;
 
 const quiet = async (fn) => {
@@ -173,5 +174,30 @@ describe('seedRoadsidePlaces', () => {
   test('a database failure is reported, never thrown', async () => {
     const result = await quiet(() => roadside.seedRoadsidePlaces(async () => { throw new Error('db down'); }, dataset));
     assert.equal(result.error, 'db down');
+  });
+});
+
+describe('roadside data still loading', () => {
+  test('inside a covered territory, an unseeded table answers covered:false so the app asks Overpass', async () => {
+    const calls = [];
+    const res = makeRes();
+    await handler({ calls, loaded: false })({ query: { key: 'roadside_towing', lat: '18.0', lng: '-76.8' } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.data.covered, false);
+    assert.equal(res.body.data.territory, 'JM', 'the point is inside a covered territory');
+    assert.deepEqual(res.body.data.elements, []);
+    assert.equal(calls.length, 0, 'no nearby query while the table is not loaded');
+  });
+
+  test('isDatasetLoaded is true only when every place of this version is in the table', async () => {
+    const dataset = { version: 'v9', places: [{}, {}, {}] };
+    const count = (n) => async (text, params) => {
+      assert.match(text, /FROM roadside_places WHERE dataset_version = \$1/);
+      assert.deepEqual(params, ['v9']);
+      return { rows: [{ n }] };
+    };
+    assert.equal(await roadside.isDatasetLoaded(count(3), dataset), true);
+    assert.equal(await roadside.isDatasetLoaded(count(2), dataset), false);
+    assert.equal(await roadside.isDatasetLoaded(count(0), dataset), false);
   });
 });

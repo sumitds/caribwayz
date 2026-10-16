@@ -3,16 +3,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getBroadcasts, createBroadcast, deleteBroadcast } from '../../api/admin';
 import Layout from '../../components/Layout/Layout';
 import Button from '../../components/UI/Button';
-import { MdCampaign, MdDelete, MdWarning, MdInfo, MdLocalFireDepartment } from 'react-icons/md';
+import { MdCampaign, MdDelete, MdWarning, MdInfo, MdLocalFireDepartment, MdLocalOffer } from 'react-icons/md';
 import { formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
 
-const TYPES = ['disaster', 'hazard', 'emergency', 'road_closure', 'info'];
+const TYPES = ['disaster', 'hazard', 'emergency', 'road_closure', 'info', 'promotion'];
 const SEVERITIES = ['info', 'warning', 'critical'];
 const PARISHES = ['Kingston', 'St. Andrew', 'St. Thomas', 'Portland', 'St. Mary', 'St. Ann', 'Trelawny', 'St. James', 'Hanover', 'Westmoreland', 'St. Elizabeth', 'Manchester', 'Clarendon', 'St. Catherine'];
 
 const severityColor = { info: '#3b82f6', warning: '#F5A623', critical: '#CC2229' };
-const typeIcon = { disaster: MdLocalFireDepartment, hazard: MdWarning, emergency: MdWarning, road_closure: MdWarning, info: MdInfo };
+const typeIcon = { disaster: MdLocalFireDepartment, hazard: MdWarning, emergency: MdWarning, road_closure: MdWarning, info: MdInfo, promotion: MdLocalOffer };
+
+// Promotions are opt-in in the app (Settings > Notifications > Promotional
+// notifications); the API sends them to nobody else.
+const PROMOTION_NOTE = 'Promotions go only to people who turned on promotional notifications in the app.';
 
 const selectStyle = {
   background: 'var(--bg-input)', border: '1px solid var(--border)',
@@ -32,10 +36,18 @@ const AdminBroadcast = () => {
 
   const createMutation = useMutation({
     mutationFn: createBroadcast,
-    onSuccess: () => {
+    onSuccess: (res, sent) => {
       queryClient.invalidateQueries(['admin-broadcasts']);
       queryClient.invalidateQueries(['admin-stats']);
-      toast.success('Alert broadcast sent island-wide');
+      // notified is -1 when the broadcast was saved but could not be delivered.
+      const notified = res.data?.data?.notified;
+      if (typeof notified === 'number' && notified < 0) {
+        toast.error('Saved, but it could not be delivered. Please try again.');
+      } else if (sent.type === 'promotion') {
+        toast.success(`Promotion sent to ${notified} ${notified === 1 ? 'person' : 'people'} who opted in`);
+      } else {
+        toast.success('Alert broadcast sent island-wide');
+      }
       setForm({ title: '', message: '', type: 'hazard', scope: 'island_wide', parish: '', severity: 'warning' });
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to broadcast'),
@@ -95,6 +107,9 @@ const AdminBroadcast = () => {
                 <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={selectStyle}>
                   {TYPES.map((t) => <option key={t} value={t}>{t.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>)}
                 </select>
+                {form.type === 'promotion' && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem', lineHeight: 1.4 }}>{PROMOTION_NOTE}</p>
+                )}
               </div>
               <div>
                 <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Severity</label>

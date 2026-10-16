@@ -2,10 +2,12 @@ const router = require('express').Router();
 const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 const {
-  register, login, forgotPassword, verifyOtp, logout, googleLogin, facebookLogin, phoneLogin,
+  register, login, verifyTwoFactorLogin, forgotPassword, verifyOtp, logout, googleLogin, facebookLogin, phoneLogin,
 } = require('../controllers/authController');
 const { authenticate } = require('../middleware/auth');
-const { firebaseSignInLimiter, forgotPasswordLimiter, resetVerifyLimiter } = require('../middleware/rateLimits');
+const {
+  firebaseSignInLimiter, loginLimiter, forgotPasswordLimiter, resetVerifyLimiter, twoFactorVerifyLimiter,
+} = require('../middleware/rateLimits');
 const { isPlaceholderName } = require('../utils/displayName');
 
 /** Password rules for any field that sets a password: /register and a reset. */
@@ -57,12 +59,26 @@ router.post(
 
 router.post(
   '/login',
+  loginLimiter,
   [
     body('email').isEmail().withMessage('Valid email is required'),
     body('password').notEmpty().withMessage('Password is required'),
   ],
   validate,
   login
+);
+
+// The second step of an email sign-in with two-step sign-in on. The
+// challenge came back from /login with the 403 TWO_FACTOR_REQUIRED.
+router.post(
+  '/login/verify-code',
+  twoFactorVerifyLimiter,
+  [
+    body('challenge').isString().matches(/^[A-Za-z0-9_-]{43}$/).withMessage('challenge is invalid'),
+    body('code').isString().matches(/^[0-9]{6}$/).withMessage('Code must be 6 digits'),
+  ],
+  validate,
+  verifyTwoFactorLogin
 );
 
 router.post('/google-login', firebaseSignInLimiter, firebaseSignInRules, validate, googleLogin);

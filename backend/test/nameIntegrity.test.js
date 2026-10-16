@@ -5,10 +5,12 @@
 //  - the group invite email escapes user-typed names and never says "undefined";
 //  - stored SOS copy never reads "SOS from default".
 
-const { test, describe, before, after } = require('node:test');
+const { test, describe, before, after, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const express = require('express');
+
+const SESSION_ID = '0b9c8d7e-6f5a-4b3c-8d2e-1f0a9b8c7d6e';
 
 const { isPlaceholderName, displayName, normalizeName, escapeHtml } = require('../src/utils/displayName');
 const { buildGroupEventHandlers } = require('../src/controllers/groupEventController');
@@ -43,10 +45,14 @@ describe('route validators', () => {
   let server;
   let base;
   let token;
+  let sessionCheck;
 
   before(async () => {
+    // Every token names its sign-in session, which authenticate checks is
+    // still live. There is no database here, so every session counts as live.
+    sessionCheck = mock.method(require('../src/services/sessionService').sessionService(), 'isSessionActive', async () => true);
     const { generateToken } = require('../src/utils/jwt');
-    token = generateToken({ id: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', email: 'v@example.com', role: 'user' });
+    token = generateToken({ id: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', email: 'v@example.com', role: 'user', sid: SESSION_ID });
     const app = express();
     app.use(express.json());
     app.use('/auth', require('../src/routes/auth'));
@@ -55,7 +61,10 @@ describe('route validators', () => {
     base = `http://127.0.0.1:${server.address().port}`;
   });
 
-  after(() => new Promise((resolve) => server.close(resolve)));
+  after(async () => {
+    sessionCheck.mock.restore();
+    await new Promise((resolve) => server.close(resolve));
+  });
 
   const validSignUp = {
     name: 'Asha Brown',

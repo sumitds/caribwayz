@@ -506,6 +506,7 @@ const options = {
                               push_reports: { type: 'boolean', description: 'Push when someone confirms your report. Default true.' },
                               push_app_updates: { type: 'boolean', description: 'Push for informational admin broadcasts. Default true.' },
                               push_promotions: { type: 'boolean', description: 'Push for promotional broadcasts. Default false (opt-in).' },
+                              push_weather: { type: 'boolean', description: 'Push when a hurricane or tropical storm comes near the area set with PUT /user/alert-area. Default true.' },
                             },
                           },
                         },
@@ -540,6 +541,7 @@ const options = {
                     push_reports: { type: 'boolean', description: 'Push when someone confirms your report. Default true.' },
                     push_app_updates: { type: 'boolean', description: 'Push for informational admin broadcasts. Default true.' },
                     push_promotions: { type: 'boolean', description: 'Push for promotional broadcasts. Default false (opt-in).' },
+                    push_weather: { type: 'boolean', description: 'Push for hurricane and tropical storm alerts. Default true. Setting it false also deletes the stored alert area.' },
                   },
                 },
               },
@@ -549,6 +551,34 @@ const options = {
             200: { description: 'Updated preferences, in data.preferences' },
             404: { description: 'The account has no preferences row' },
             422: { description: 'A push_* field is not a boolean' },
+          },
+        },
+      },
+      '/user/alert-area': {
+        put: {
+          tags: ['User'],
+          summary: 'Set the rough area used for weather alerts',
+          description: 'Stores the rough area of the caller, rounded to one decimal place (about 11 km), so the server can push hurricane and tropical storm alerts (NHC feed, checked every 15 minutes; a hurricane within 800 km or a tropical storm within 400 km, once per storm and strength). Kept only while push_weather is on: with it off nothing is stored and data.stored is false. An area not updated for 14 days is not used. Rate limited per account.',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['latitude', 'longitude'],
+                  properties: {
+                    latitude: { type: 'number', minimum: -90, maximum: 90, example: 18.01 },
+                    longitude: { type: 'number', minimum: -180, maximum: 180, example: -76.79 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: 'data.stored is true when the area was saved, false when weather alerts are off' },
+            422: { description: 'latitude or longitude missing, not a number, or out of range' },
+            429: { description: 'Too many updates' },
           },
         },
       },
@@ -1173,6 +1203,25 @@ const options = {
           },
         },
       },
+      '/shelters': {
+        get: {
+          tags: ['POIs'],
+          summary: 'Designated disaster shelters and evacuation points near a position',
+          description: 'Shelters and evacuation points from the CaribWayz shelter directory (OpenStreetMap data, ODbL). Says where a shelter is designated, never whether it is open. covered is false outside the Caribbean territories the directory holds; the app then asks Overpass itself. Elements use the Overpass element format.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'lat', in: 'query', required: true, schema: { type: 'number' }, example: 18.0179 },
+            { name: 'lng', in: 'query', required: true, schema: { type: 'number' }, example: -76.8099 },
+            { name: 'radius', in: 'query', schema: { type: 'number', default: 30000 }, description: 'Radius in metres, 50 to 50000' },
+            { name: 'limit', in: 'query', schema: { type: 'integer', default: 40 }, description: 'Most shelters returned, 1 to 200' },
+          ],
+          responses: {
+            200: { description: '{ covered, territory, dataset, elements[] } nearest first' },
+            400: { description: 'Invalid coordinate, radius or limit' },
+            401: { description: 'No or invalid token' },
+          },
+        },
+      },
       '/pois': {
         get: {
           tags: ['POIs'],
@@ -1436,7 +1485,7 @@ const options = {
         post: {
           tags: ['Admin'],
           summary: 'Send a broadcast to every active account',
-          description: 'Saves the broadcast and sends every active account a `system` notification, pushed under a category chosen by type: disaster, hazard, emergency and road_closure use `emergency`; info uses `app_updates`; promotion uses `promotions` (opt-in). Accounts carry no parish, so a parish broadcast goes to everyone with the parish prefixed to the title.',
+          description: 'Saves the broadcast and sends every active account a `system` notification, pushed under a category chosen by type: disaster, hazard, emergency and road_closure use `emergency`; info uses `app_updates`; promotion uses `promotions` and goes only to accounts that turned promotional notifications on (no notification row for anyone else). Accounts carry no parish, so a parish broadcast goes to everyone with the parish prefixed to the title.',
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,

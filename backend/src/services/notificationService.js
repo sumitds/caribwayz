@@ -18,6 +18,7 @@ const CATEGORIES = Object.freeze({
   reports: { column: 'push_reports', fallback: true },
   app_updates: { column: 'push_app_updates', fallback: true },
   promotions: { column: 'push_promotions', fallback: false },
+  weather: { column: 'push_weather', fallback: true },
 });
 
 /** Values allowed by the notifications.type CHECK constraint. */
@@ -26,6 +27,9 @@ const NOTIFICATION_TYPES = Object.freeze(['general', 'report', 'emergency', 'gro
 /** Android notification channels the app creates. Emergencies get the loud one. */
 const ALERT_CHANNEL = 'caribwayz_alerts';
 const GENERAL_CHANNEL = 'caribwayz_general';
+
+/** Categories that ring on ALERT_CHANNEL: a storm warning is as urgent as an SOS. */
+const ALERT_CATEGORIES = new Set(['emergency', 'weather']);
 
 /** sendEachForMulticast accepts at most 500 tokens per call. */
 const FCM_BATCH_SIZE = 500;
@@ -90,7 +94,7 @@ const buildMessage = (tokens, { title, message, type, reference_id, data, catego
   data: toDataPayload(data, { type, reference_id, category }),
   android: {
     priority: 'high',
-    notification: { channelId: category === 'emergency' ? ALERT_CHANNEL : GENERAL_CHANNEL },
+    notification: { channelId: ALERT_CATEGORIES.has(category) ? ALERT_CHANNEL : GENERAL_CHANNEL },
   },
   apns: { payload: { aps: { sound: 'default' } } },
 });

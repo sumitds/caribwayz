@@ -75,3 +75,44 @@ describe('updateProfile: password change', () => {
     assert.equal(await bcrypt.compare('Abc@1234', update.params[0]), true);
   });
 });
+
+describe('updateProfile: password change signs out other devices', () => {
+  const SID = '0b9c8d7e-6f5a-4b3c-8d2e-1f0a9b8c7d6e';
+
+  const changeAs = async (user, { failRevoke = false } = {}) => {
+    const writes = [];
+    const { updateProfile } = loadWithDb(async (text, params) => {
+      if (/^SELECT password_hash FROM users/.test(text)) return { rows: [{ password_hash: await bcrypt.hash('right', 4) }] };
+      if (failRevoke && /UPDATE user_sessions/.test(text)) throw new Error('db down');
+      writes.push({ text, params });
+      if (/UPDATE user_sessions/.test(text)) return { rows: [{ id: '7e6d5c4b-3a2f-4e1d-9c0b-a9f8e7d6c5b4' }] };
+      return { rows: [{ id: USER_ID, name: 'N' }] };
+    });
+    const res = makeRes();
+    await updateProfile({ body: { current_password: 'right', new_password: 'Abc@1234' }, user }, res);
+    return { res, writes };
+  };
+
+  test('every other session ends, this one is kept, before the password changes', async () => {
+    const { res, writes } = await changeAs({ id: USER_ID, sid: SID });
+    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+    const revokeAt = writes.findIndex((w) => /UPDATE user_sessions SET revoked_at/.test(w.text));
+    const passwordAt = writes.findIndex((w) => /SET password_hash = \$1/.test(w.text));
+    assert.ok(revokeAt >= 0 && revokeAt < passwordAt);
+    assert.deepEqual(writes[revokeAt].params, [USER_ID, SID]);
+    assert.match(writes[revokeAt].text, /id <> \$2::uuid/);
+  });
+
+  test('a token from before sign-in history keeps no session', async () => {
+    const { writes } = await changeAs({ id: USER_ID });
+    const revoke = writes.find((w) => /UPDATE user_sessions/.test(w.text));
+    assert.deepEqual(revoke.params, [USER_ID, null]);
+  });
+
+  test('if other devices cannot be signed out, the password is not changed', async (t) => {
+    t.mock.method(console, 'error', () => {});
+    const { res, writes } = await changeAs({ id: USER_ID, sid: SID }, { failRevoke: true });
+    assert.equal(res.statusCode, 500);
+    assert.equal(writes.some((w) => /SET password_hash/.test(w.text)), false);
+  });
+});

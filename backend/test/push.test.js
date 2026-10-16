@@ -6,10 +6,12 @@
 // end run the real migrations, routes and SQL against Postgres, and only when
 // TEST_DATABASE_URL points at a throwaway database (they create and delete rows).
 
-const { test, describe, before, after } = require('node:test');
+const { test, describe, before, after, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const express = require('express');
+
+const SESSION_ID = '0b9c8d7e-6f5a-4b3c-8d2e-1f0a9b8c7d6e';
 
 const USER_ID = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
 const ADMIN_ID = '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d';
@@ -58,11 +60,15 @@ describe('device-token and preference validators', () => {
   let base;
   let userToken;
   let adminToken;
+  let sessionCheck;
 
   before(async () => {
+    // Every token names its sign-in session, which authenticate checks is
+    // still live. There is no database here, so every session counts as live.
+    sessionCheck = mock.method(require('../src/services/sessionService').sessionService(), 'isSessionActive', async () => true);
     const { generateToken } = require('../src/utils/jwt');
-    userToken = generateToken({ id: USER_ID, email: 'v@example.com', role: 'user' });
-    adminToken = generateToken({ id: ADMIN_ID, email: 'a@example.com', role: 'admin' });
+    userToken = generateToken({ id: USER_ID, email: 'v@example.com', role: 'user', sid: SESSION_ID });
+    adminToken = generateToken({ id: ADMIN_ID, email: 'a@example.com', role: 'admin', sid: SESSION_ID });
     const app = express();
     app.use(express.json());
     app.use('/user', require('../src/routes/user'));
@@ -71,7 +77,10 @@ describe('device-token and preference validators', () => {
     base = `http://127.0.0.1:${server.address().port}`;
   });
 
-  after(() => new Promise((resolve) => server.close(resolve)));
+  after(async () => {
+    sessionCheck.mock.restore();
+    await new Promise((resolve) => server.close(resolve));
+  });
 
   const call = async (method, url, body, token = userToken) => {
     const res = await fetch(base + url, {
@@ -328,7 +337,7 @@ describe('push against Postgres', { skip: !process.env.TEST_DATABASE_URL && 'set
     // Everything that captured the db module at load is loaded fresh, so it
     // talks to the throwaway database.
     for (const mod of [
-      'config/db', 'middleware/auth', 'services/notificationService',
+      'config/db', 'services/sessionService', 'middleware/auth', 'services/notificationService',
       'controllers/userController', 'controllers/accountController', 'controllers/reportController',
       'controllers/adminController', 'routes/user', 'routes/reports', 'routes/admin', 'migrations/migrate',
     ]) {
@@ -355,8 +364,12 @@ describe('push against Postgres', { skip: !process.env.TEST_DATABASE_URL && 'set
     await mk('boss', { role: 'admin' });
 
     const { generateToken } = require('../src/utils/jwt');
+    // Every token names a recorded sign-in session; authenticate refuses one that does not.
     for (const [k, id] of Object.entries(users)) {
-      tokens[k] = generateToken({ id, email: `${k}@push.test`, role: k === 'boss' ? 'admin' : 'user' });
+      const sid = require('node:crypto').randomUUID();
+      await q(`INSERT INTO user_sessions (id, user_id, method, platform, expires_at)
+               VALUES ($1, $2, 'email', 'android', NOW() + INTERVAL '1 day')`, [sid, id]);
+      tokens[k] = generateToken({ id, email: `${k}@push.test`, role: k === 'boss' ? 'admin' : 'user', sid });
     }
 
     const app = express();

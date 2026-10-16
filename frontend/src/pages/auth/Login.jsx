@@ -4,13 +4,19 @@ import { useAuth } from '../../context/AuthContext';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import toast from 'react-hot-toast';
+import { twoFactorChallengeFrom, isSixDigitCode, codeFailure } from './loginModel';
 
 const Login = () => {
-  const { login } = useAuth();
+  const { login, completeTwoFactorLogin } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  // Set once the password was right and a code was emailed.
+  const [twoFactor, setTwoFactor] = useState(null);
+  const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [locked, setLocked] = useState(false);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -27,10 +33,50 @@ const Login = () => {
       toast.success(`Welcome back, ${user.name}!`);
       navigate('/dashboard');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed');
+      const pending = twoFactorChallengeFrom(err);
+      if (pending) {
+        setTwoFactor(pending);
+        setCode('');
+        setCodeError('');
+        setLocked(false);
+      } else {
+        toast.error(err.response?.data?.message || 'Login failed');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCodeSubmit = async (e) => {
+    e.preventDefault();
+    if (!isSixDigitCode(code)) { setCodeError('Enter the 6-digit code from the email.'); return; }
+    setLoading(true);
+    setCodeError('');
+    try {
+      const user = await completeTwoFactorLogin(twoFactor.challenge, code.trim());
+      toast.success(`Welcome back, ${user.name}!`);
+      navigate('/dashboard');
+    } catch (err) {
+      const failure = codeFailure(err);
+      setCode('');
+      if (failure.restart) {
+        // This code can never work now; a new one needs the password again.
+        setTwoFactor(null);
+        toast.error(failure.message);
+      } else {
+        setCodeError(failure.message);
+        setLocked(failure.locked);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const backToPassword = () => {
+    setTwoFactor(null);
+    setCode('');
+    setCodeError('');
+    setLocked(false);
   };
 
   const inputStyle = {
@@ -56,6 +102,36 @@ const Login = () => {
           <p style={{ color: '#666', marginTop: '0.5rem', fontSize: '0.9rem' }}>Sign in to your account</p>
         </div>
 
+        {twoFactor ? (
+        <form onSubmit={handleCodeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+          <p style={{ color: '#444', fontSize: '0.9rem', margin: 0 }}>
+            Two-step sign-in is on for this account. We sent a 6-digit code to {twoFactor.emailHint}.
+            It expires in {twoFactor.expiresInMinutes} minutes.
+          </p>
+          <div>
+            <label style={labelStyle} htmlFor="login-code">Sign-in code</label>
+            <input
+              id="login-code" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+              placeholder="123456" value={code} disabled={locked}
+              onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+              style={inputStyle} autoFocus
+            />
+            {codeError && <p role="alert" style={{ color: '#D12229', fontSize: '0.78rem', marginTop: '0.25rem' }}>{codeError}</p>}
+          </div>
+          <button type="submit" disabled={loading || locked} style={{
+            background: '#D12229', color: '#fff', border: 'none', borderRadius: 8,
+            padding: '0.75rem', fontWeight: 700, fontSize: '1rem', cursor: loading || locked ? 'not-allowed' : 'pointer',
+            opacity: loading || locked ? 0.7 : 1, width: '100%',
+          }}>
+            {loading ? 'Checking…' : 'Verify and sign in'}
+          </button>
+          <button type="button" onClick={backToPassword} disabled={loading} style={{
+            background: 'none', border: 'none', color: '#D12229', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem',
+          }}>
+            Use a different account or get a new code
+          </button>
+        </form>
+        ) : (
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
           <div>
             <label style={labelStyle}>Email Address</label>
@@ -82,6 +158,7 @@ const Login = () => {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
+        )}
 
         <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.88rem', color: '#666' }}>
           Don't have an account?{' '}
