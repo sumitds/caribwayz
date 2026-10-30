@@ -1,3 +1,4 @@
+const net = require('net');
 const rateLimit = require('express-rate-limit');
 
 /**
@@ -42,6 +43,44 @@ const ipAndEmailKey = (req) => {
   return `${req.ip}|${email}`;
 };
 
+/**
+ * The eight 16-bit groups of an IPv6 address, or null when [ip] is not one.
+ * A zone ("%eth0") is dropped and an embedded IPv4 tail becomes two groups.
+ */
+const ipv6Groups = (ip) => {
+  const address = String(ip).split('%')[0];
+  if (!net.isIPv6(address)) return null;
+  const toGroups = (part) => {
+    if (part === '') return [];
+    return part.split(':').flatMap((g) => {
+      if (!g.includes('.')) return [parseInt(g, 16)];
+      const [a, b, c, d] = g.split('.').map(Number);
+      return [(a << 8) | b, (c << 8) | d];
+    });
+  };
+  const [head, tail] = address.includes('::') ? address.split('::') : [address, null];
+  const front = toGroups(head);
+  const back = tail === null ? [] : toGroups(tail);
+  const zeros = new Array(8 - front.length - back.length).fill(0);
+  return [...front, ...zeros, ...back];
+};
+
+/**
+ * The client's network for a per-IP limit. An IPv4 address is itself. An
+ * IPv6 address counts by its /64: one home or phone is normally given a whole
+ * /64, so counting single addresses would let one sender take a new address
+ * for every request. An IPv4 address written as IPv6 (::ffff:1.2.3.4) counts
+ * as the IPv4 address.
+ */
+const clientNetworkKey = (req) => {
+  const ip = req.ip || '';
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip);
+  if (mapped) return mapped[1];
+  const groups = ipv6Groups(ip);
+  if (!groups) return ip;
+  return `${groups.slice(0, 4).map((g) => g.toString(16)).join(':')}::/64`;
+};
+
 const LIMITS = {
   // Google, Facebook and phone sign-in. Each call verifies a Firebase token,
   // so this is mostly about not being a free token-checking oracle.
@@ -54,6 +93,12 @@ const LIMITS = {
   resetVerify: { max: 10, message: 'Too many attempts. Please wait 15 minutes and try again.' },
   // Each call is a guess at a two-step sign-in code.
   twoFactorVerify: { max: 10, message: 'Too many attempts. Please wait 15 minutes and try again.' },
+  // The public /membership form. Each call stores a row and emails the team.
+  membershipApply: {
+    max: 5,
+    windowMs: 60 * 60 * 1000,
+    message: 'Too many applications from this connection. Please wait an hour and try again, or email us.',
+  },
 };
 
 const firebaseSignInLimiter = buildLimiter(LIMITS.firebaseSignIn);
@@ -61,6 +106,7 @@ const loginLimiter = buildLimiter({ ...LIMITS.login, keyGenerator: ipAndEmailKey
 const forgotPasswordLimiter = buildLimiter(LIMITS.forgotPassword);
 const resetVerifyLimiter = buildLimiter(LIMITS.resetVerify);
 const twoFactorVerifyLimiter = buildLimiter(LIMITS.twoFactorVerify);
+const membershipApplyLimiter = buildLimiter({ ...LIMITS.membershipApply, keyGenerator: clientNetworkKey });
 
 module.exports = {
   LIMITS,
@@ -68,7 +114,9 @@ module.exports = {
   firebaseSignInLimiter,
   loginLimiter,
   ipAndEmailKey,
+  clientNetworkKey,
   forgotPasswordLimiter,
   resetVerifyLimiter,
   twoFactorVerifyLimiter,
+  membershipApplyLimiter,
 };

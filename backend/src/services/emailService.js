@@ -211,4 +211,64 @@ const sendTwoFactorCode = async ({ toEmail, code, expiresInMinutes, purpose }) =
   });
 };
 
-module.exports = { sendGroupInvite, isEmailConfigured, sendPasswordResetCode, sendTwoFactorCode };
+/**
+ * Tells the CaribWayz team a business applied on the /membership page, so
+ * they can send the invoice. Everything in [application] was typed by the
+ * public, so it is escaped in the HTML and kept off the subject's header line
+ * breaks. [tier] is the tier the server chose (publicTier shape), or null
+ * when none fitted.
+ */
+const sendMembershipApplicationNotice = async ({ toEmail, application, tier }) => {
+  if (typeof toEmail !== 'string' || /[\r\n,;]/.test(toEmail) || !toEmail.includes('@')) {
+    throw new Error('sendMembershipApplicationNotice: a single valid recipient address is required');
+  }
+  if (!application || typeof application.business_name !== 'string') {
+    throw new Error('sendMembershipApplicationNotice: the application is required');
+  }
+
+  const fee = !tier
+    ? 'No tier fits this employee count; set the fee by hand.'
+    : tier.annual_fee === null
+      ? `${tier.name}: fee to be confirmed`
+      : `${tier.name}: ${tier.currency} ${tier.annual_fee.toFixed(2)} a year${tier.is_provisional ? ' (provisional)' : ''}`;
+
+  const rows = [
+    ['Business', application.business_name],
+    ['Contact', application.contact_name],
+    ['Email', application.email],
+    ['Phone', application.phone],
+    ['Address', application.address],
+    ['Category', application.category],
+    ['Employees', application.employee_count],
+    ['Website', application.website],
+    ['Tier', fee],
+    ['Message', application.message],
+    ['Application id', application.id],
+  ].filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;border-radius:12px;background:#f9f9f9;">
+      <h2 style="color:#10c329;">New member business application</h2>
+      <table style="font-size:14px;border-collapse:collapse;">
+        ${rows.map(([label, value]) => `<tr><td style="padding:4px 12px 4px 0;color:#555;vertical-align:top;">${label}</td><td style="padding:4px 0;">${escapeHtml(String(value))}</td></tr>`).join('')}
+      </table>
+      <p style="font-size:14px;color:#555;">Open Membership Applications in the CaribWayz admin panel to invoice and activate it.</p>
+      <p style="font-size:12px;color:#999;text-align:center;margin-top:24px;">CaribWayz — Navigate Together</p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from: `"CaribWayz" <${process.env.SMTP_USER}>`,
+    to: toEmail,
+    subject: `Membership application: ${application.business_name}`.replace(/[\r\n]+/g, ' '),
+    html,
+    text: `New member business application\n\n${rows.map(([label, value]) => `${label}: ${value}`).join('\n')}\n\nOpen Membership Applications in the CaribWayz admin panel to invoice and activate it.`,
+    headers: {
+      'X-Mailer': 'CaribWayz Mailer',
+    },
+  });
+};
+
+module.exports = {
+  sendGroupInvite, isEmailConfigured, sendPasswordResetCode, sendTwoFactorCode, sendMembershipApplicationNotice,
+};

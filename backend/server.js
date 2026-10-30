@@ -25,6 +25,7 @@ const recordRoutes = require('./src/routes/records');
 const providerRoutes = require('./src/routes/providers');
 const { seedRoadsidePlaces } = require('./src/services/roadsidePlaces');
 const shelterRoutes = require('./src/routes/shelters');
+const memberRoutes = require('./src/routes/members');
 const { seedEmergencyShelters } = require('./src/services/emergencyShelters');
 const db = require('./src/config/db');
 
@@ -77,6 +78,7 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/records', recordRoutes);
 app.use('/api/v1/providers', providerRoutes);
 app.use('/api/v1/shelters', shelterRoutes);
+app.use('/api/v1/members', memberRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
