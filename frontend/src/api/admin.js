@@ -22,8 +22,17 @@ export const getPartners = (params) => api.get('/admin/partners', { params });
 export const addPartner = (data) => api.post('/admin/partners', data);
 export const updatePartnerStatus = (id, status) => api.patch(`/admin/partners/${id}/status`, { status });
 
-export const getSponsorships = (params) => api.get('/admin/sponsorships', { params });
-export const updateSponsorship = (id, data) => api.patch(`/admin/sponsorships/${id}`, data);
+// Member businesses (docs/members-contract.md)
+export const getMembershipTiers = () => api.get('/admin/membership-tiers');
+export const addMembershipTier = (data) => api.post('/admin/membership-tiers', data);
+export const updateMembershipTier = (id, data) => api.patch(`/admin/membership-tiers/${id}`, data);
+
+export const getMembershipApplications = (params) => api.get('/admin/membership-applications', { params });
+export const updateMembershipApplication = (id, data) => api.patch(`/admin/membership-applications/${id}`, data);
+export const activateMembershipApplication = (id, data) => api.post(`/admin/membership-applications/${id}/activate`, data);
+
+export const getMembershipSettings = () => api.get('/admin/membership-settings');
+export const updateMembershipSettings = (data) => api.put('/admin/membership-settings', data);
 
 export const getPayouts = (params) => api.get('/admin/payouts', { params });
 export const updatePayout = (id, data) => api.patch(`/admin/payouts/${id}`, data);

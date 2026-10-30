@@ -1,6 +1,7 @@
 const { query } = require('../config/db');
 const { success, created, error, notFound } = require('../utils/response');
 const { notify } = require('../services/notificationService');
+const { LISTED_MEMBER_SQL } = require('../services/membership');
 
 const getUsers = async (req, res) => {
   try {
@@ -125,59 +126,6 @@ const removeReport = async (req, res) => {
   }
 };
 
-const addBusiness = async (req, res) => {
-  try {
-    const { name, category, latitude, longitude, address, phone, website, description, membership_tier, business_size } = req.body;
-    const result = await query(
-      `INSERT INTO businesses (name, category, latitude, longitude, address, phone, website, description, membership_tier, business_size, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [name, category, latitude, longitude, address, phone, website, description,
-       membership_tier || 'journey', business_size || 'small', req.user.id]
-    );
-    return created(res, { business: result.rows[0] }, 'Business added');
-  } catch (err) {
-    console.error('Add business error:', err);
-    return error(res, 'Failed to add business', 500);
-  }
-};
-
-const getBusinesses = async (req, res) => {
-  try {
-    const { tier, status } = req.query;
-    let sql = `SELECT * FROM businesses WHERE 1=1`;
-    const params = [];
-    if (tier) { params.push(tier); sql += ` AND membership_tier = $${params.length}`; }
-    if (status) { params.push(status === 'true'); sql += ` AND is_active = $${params.length}`; }
-    sql += ` ORDER BY created_at DESC`;
-    const result = await query(sql, params);
-    return success(res, { businesses: result.rows });
-  } catch (err) {
-    console.error('Get businesses error:', err);
-    return error(res, 'Failed to fetch businesses', 500);
-  }
-};
-
-const updateBusiness = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { membership_tier, business_size, membership_status, is_active } = req.body;
-    const result = await query(
-      `UPDATE businesses SET
-         membership_tier = COALESCE($1, membership_tier),
-         business_size = COALESCE($2, business_size),
-         membership_status = COALESCE($3, membership_status),
-         is_active = COALESCE($4, is_active)
-       WHERE id = $5 RETURNING *`,
-      [membership_tier, business_size, membership_status, is_active, id]
-    );
-    if (result.rows.length === 0) return notFound(res, 'Business not found');
-    return success(res, { business: result.rows[0] }, 'Business updated');
-  } catch (err) {
-    console.error('Update business error:', err);
-    return error(res, 'Failed to update business', 500);
-  }
-};
-
 const getDashboardStats = async (req, res) => {
   try {
     const [users, routes, reports, emergencies, groups, businesses, broadcasts] = await Promise.all([
@@ -186,7 +134,8 @@ const getDashboardStats = async (req, res) => {
       query("SELECT COUNT(*) FROM reports WHERE status = 'active'"),
       query("SELECT COUNT(*) FROM emergency_alerts WHERE status = 'active'"),
       query("SELECT COUNT(*) FROM groups"),
-      query("SELECT COUNT(*) FROM businesses WHERE is_active = true"),
+      // Members the app shows: listed, active and not past their expiry.
+      query(`SELECT COUNT(*) FROM businesses WHERE ${LISTED_MEMBER_SQL}`),
       query("SELECT COUNT(*) FROM broadcasts"),
     ]);
 
@@ -363,48 +312,6 @@ const updatePartnerStatus = async (req, res) => {
   }
 };
 
-// Sponsorships
-const getSponsorships = async (req, res) => {
-  try {
-    const { status } = req.query;
-    let sql = `SELECT s.*, u.name as user_name, u.email as user_email
-               FROM sponsorships s LEFT JOIN users u ON s.user_id = u.id WHERE 1=1`;
-    const params = [];
-    if (status) { params.push(status); sql += ` AND s.status = $${params.length}`; }
-    sql += ` ORDER BY s.created_at DESC`;
-    const result = await query(sql, params);
-    const counts = await query(`SELECT status, COUNT(*) FROM sponsorships GROUP BY status`);
-    const summary = {};
-    counts.rows.forEach(r => { summary[r.status] = parseInt(r.count); });
-    return success(res, { sponsorships: result.rows, summary });
-  } catch (err) {
-    console.error('Get sponsorships error:', err);
-    return error(res, 'Failed to fetch sponsorships', 500);
-  }
-};
-
-const updateSponsorshipStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, starts_at, expires_at, notes } = req.body;
-    const result = await query(
-      `UPDATE sponsorships SET
-         status = COALESCE($1, status),
-         starts_at = COALESCE($2::timestamptz, starts_at),
-         expires_at = COALESCE($3::timestamptz, expires_at),
-         notes = COALESCE($4, notes),
-         updated_at = NOW()
-       WHERE id = $5 RETURNING *`,
-      [status, starts_at || null, expires_at || null, notes || null, id]
-    );
-    if (result.rows.length === 0) return notFound(res, 'Sponsorship not found');
-    return success(res, { sponsorship: result.rows[0] }, 'Sponsorship updated');
-  } catch (err) {
-    console.error('Update sponsorship error:', err);
-    return error(res, 'Failed to update sponsorship', 500);
-  }
-};
-
 // Payouts
 const getPayouts = async (req, res) => {
   try {
@@ -453,10 +360,9 @@ const updatePayoutStatus = async (req, res) => {
 
 module.exports = {
   getUsers, updateUserStatus, updateResponderApproval, getAllReports, removeReport,
-  addBusiness, getBusinesses, updateBusiness, getDashboardStats,
+  getDashboardStats,
   getBroadcasts, createBroadcast, deleteBroadcast,
   getPartners, addPartner, updatePartnerStatus,
-  getSponsorships, updateSponsorshipStatus,
   getPayouts, updatePayoutStatus,
   BROADCAST_CATEGORIES, BROADCAST_TYPES,
 };

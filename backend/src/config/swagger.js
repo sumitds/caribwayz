@@ -202,6 +202,7 @@ const options = {
       { name: 'POIs', description: 'Points of interest' },
       { name: 'Emergency', description: 'Emergency alerts, delivered to responders as notifications and push' },
       { name: 'Notifications', description: 'In-app notifications. Every notification is also pushed (FCM) to the recipient\'s registered devices when its category is switched on in /user/preferences. Push data: { type, reference_id, category }, all strings.' },
+      { name: 'Members', description: 'Member businesses: shown on the map, and the public membership application (no login)' },
       { name: 'Admin', description: 'Admin-only management endpoints' },
     ],
     paths: {
@@ -1222,6 +1223,102 @@ const options = {
           },
         },
       },
+      '/members/nearby': {
+        get: {
+          tags: ['Members'],
+          summary: 'Member businesses near a position, nearest first',
+          description: 'Only listed members whose membership is active and not past its expiry. At most 50. No login.',
+          parameters: [
+            { name: 'lat', in: 'query', required: true, schema: { type: 'number', minimum: -90, maximum: 90 }, example: 18.0179 },
+            { name: 'lng', in: 'query', required: true, schema: { type: 'number', minimum: -180, maximum: 180 }, example: -76.8099 },
+            { name: 'radius_m', in: 'query', schema: { type: 'integer', default: 2000 }, description: 'Radius in metres, clamped to 50..20000' },
+          ],
+          responses: {
+            200: {
+              description: 'data.members',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean' },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          members: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: {
+                                id: { type: 'string', format: 'uuid' },
+                                name: { type: 'string' },
+                                category: { type: 'string', nullable: true },
+                                latitude: { type: 'number' },
+                                longitude: { type: 'number' },
+                                address: { type: 'string', nullable: true },
+                                phone: { type: 'string', nullable: true },
+                                website: { type: 'string', nullable: true },
+                                description: { type: 'string', nullable: true },
+                                promo_text: { type: 'string', nullable: true, description: 'Null when empty or past promo_expires_at' },
+                                distance_m: { type: 'integer' },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            400: { description: 'Missing or out-of-range lat/lng, or radius_m not a whole number' },
+          },
+        },
+      },
+      '/members/tiers': {
+        get: {
+          tags: ['Members'],
+          summary: 'Active membership fee tiers by employee count',
+          description: 'max_employees null means no upper bound; annual_fee null means the fee is not set yet. No login.',
+          responses: { 200: { description: 'data.tiers: [{ id, name, min_employees, max_employees, annual_fee, currency, is_provisional }] in display order' } },
+        },
+      },
+      '/members/apply': {
+        post: {
+          tags: ['Members'],
+          summary: 'Apply to become a member business (public membership page)',
+          description: 'The server picks the tier from employee_count and stores its fee as quoted_fee. Emails the CaribWayz contact address when SMTP is configured; a failed email never fails the request. Limited to 5 per hour per IP. No login.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['business_name', 'contact_name', 'email', 'employee_count'],
+                  properties: {
+                    business_name: { type: 'string', minLength: 2, maxLength: 200 },
+                    contact_name: { type: 'string', maxLength: 200 },
+                    email: { type: 'string', format: 'email' },
+                    phone: { type: 'string', maxLength: 40 },
+                    address: { type: 'string', maxLength: 500 },
+                    category: { type: 'string', maxLength: 100 },
+                    employee_count: { type: 'integer', minimum: 1, maximum: 1000000 },
+                    website: { type: 'string', maxLength: 500 },
+                    message: { type: 'string', maxLength: 2000 },
+                    latitude: { type: 'number', description: 'With longitude, or neither' },
+                    longitude: { type: 'number' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: { description: 'data = { application_id, tier: { name, annual_fee, currency, is_provisional } or null when no tier fits, payment_instructions (may be "") }' },
+            400: { description: 'Validation failed' },
+            429: { description: 'Too many applications from this IP' },
+          },
+        },
+      },
       '/pois': {
         get: {
           tags: ['POIs'],
@@ -1521,7 +1618,8 @@ const options = {
       '/admin/businesses': {
         post: {
           tags: ['Admin'],
-          summary: 'Add a business / POI',
+          summary: 'Add a business (member listing)',
+          description: 'membership_status defaults to pending. A business is shown on the map only when is_active, membership_status is active and membership_expires_at is empty or in the future.',
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -1531,26 +1629,194 @@ const options = {
                   type: 'object',
                   required: ['name', 'latitude', 'longitude'],
                   properties: {
-                    name: { type: 'string', example: 'KFC Port of Spain' },
-                    latitude: { type: 'number', example: 10.6525 },
-                    longitude: { type: 'number', example: -61.5090 },
+                    name: { type: 'string', example: 'Island Grill' },
+                    latitude: { type: 'number', example: 18.0179 },
+                    longitude: { type: 'number', example: -76.8099 },
                     category: { type: 'string', example: 'restaurant' },
-                    address: { type: 'string', example: 'Independence Square, POS' },
-                    phone: { type: 'string', example: '+18681234567' },
-                    website: { type: 'string', example: 'https://kfc.com' },
+                    address: { type: 'string' },
+                    phone: { type: 'string' },
+                    website: { type: 'string' },
                     description: { type: 'string' },
+                    image_url: { type: 'string' },
+                    is_active: { type: 'boolean' },
+                    tier_id: { type: 'integer', nullable: true },
+                    employee_count: { type: 'integer', nullable: true },
+                    contact_email: { type: 'string', nullable: true },
+                    membership_status: { type: 'string', enum: ['pending', 'active', 'expired', 'cancelled'] },
+                    membership_expires_at: { type: 'string', format: 'date-time', nullable: true },
+                    promo_text: { type: 'string', maxLength: 280, nullable: true },
+                    promo_expires_at: { type: 'string', format: 'date-time', nullable: true },
+                    membership_tier: { type: 'string', nullable: true, description: 'Legacy free text' },
+                    business_size: { type: 'string', nullable: true, description: 'Legacy free text' },
                   },
                 },
               },
             },
           },
-          responses: { 201: { description: 'Business added' } },
+          responses: { 201: { description: 'data.business' }, 400: { description: 'Unknown tier_id' }, 422: { description: 'Validation failed' } },
         },
         get: {
           tags: ['Admin'],
-          summary: 'Get all businesses',
+          summary: 'Get all businesses, newest first',
           security: [{ bearerAuth: [] }],
-          responses: { 200: { description: 'All businesses' } },
+          parameters: [
+            { name: 'membership_status', in: 'query', schema: { type: 'string', enum: ['pending', 'active', 'expired', 'cancelled'] } },
+            { name: 'is_active', in: 'query', schema: { type: 'string', enum: ['true', 'false'] } },
+          ],
+          responses: { 200: { description: 'data.businesses, each with tier_name' } },
+        },
+      },
+      '/admin/businesses/{id}': {
+        patch: {
+          tags: ['Admin'],
+          summary: 'Update any of a business\'s fields',
+          description: 'Only the fields sent change. Send null (or "") to clear an optional field such as promo_text.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', properties: {
+                    name: { type: 'string', example: 'Island Grill' },
+                    latitude: { type: 'number', example: 18.0179 },
+                    longitude: { type: 'number', example: -76.8099 },
+                    category: { type: 'string', example: 'restaurant' },
+                    address: { type: 'string' },
+                    phone: { type: 'string' },
+                    website: { type: 'string' },
+                    description: { type: 'string' },
+                    image_url: { type: 'string' },
+                    is_active: { type: 'boolean' },
+                    tier_id: { type: 'integer', nullable: true },
+                    employee_count: { type: 'integer', nullable: true },
+                    contact_email: { type: 'string', nullable: true },
+                    membership_status: { type: 'string', enum: ['pending', 'active', 'expired', 'cancelled'] },
+                    membership_expires_at: { type: 'string', format: 'date-time', nullable: true },
+                    promo_text: { type: 'string', maxLength: 280, nullable: true },
+                    promo_expires_at: { type: 'string', format: 'date-time', nullable: true },
+                    membership_tier: { type: 'string', nullable: true, description: 'Legacy free text' },
+                    business_size: { type: 'string', nullable: true, description: 'Legacy free text' },
+            } } } },
+          },
+          responses: { 200: { description: 'data.business' }, 400: { description: 'Nothing to update, or unknown tier_id' }, 404: { description: 'Business not found' }, 422: { description: 'Validation failed' } },
+        },
+      },
+      '/admin/membership-tiers': {
+        get: {
+          tags: ['Admin'],
+          summary: 'Every membership tier, inactive ones too',
+          security: [{ bearerAuth: [] }],
+          responses: { 200: { description: 'data.tiers' } },
+        },
+        post: {
+          tags: ['Admin'],
+          summary: 'Add a membership tier',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', required: ['name', 'min_employees'], properties: {
+                    name: { type: 'string', maxLength: 100 },
+                    min_employees: { type: 'integer', minimum: 1 },
+                    max_employees: { type: 'integer', nullable: true, description: 'Null = no upper bound' },
+                    annual_fee: { type: 'number', nullable: true, description: 'Null = fee not set yet' },
+                    currency: { type: 'string', example: 'USD' },
+                    is_provisional: { type: 'boolean' },
+                    sort_order: { type: 'integer', nullable: true },
+                    is_active: { type: 'boolean' },
+            } } } },
+          },
+          responses: { 201: { description: 'data.tier' }, 400: { description: 'max_employees below min_employees' }, 422: { description: 'Validation failed' } },
+        },
+      },
+      '/admin/membership-tiers/{id}': {
+        patch: {
+          tags: ['Admin'],
+          summary: 'Update a membership tier',
+          description: 'Only the fields sent change. A fee change applies to new applications; quoted fees already stored stay.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', properties: {
+                    name: { type: 'string', maxLength: 100 },
+                    min_employees: { type: 'integer', minimum: 1 },
+                    max_employees: { type: 'integer', nullable: true, description: 'Null = no upper bound' },
+                    annual_fee: { type: 'number', nullable: true, description: 'Null = fee not set yet' },
+                    currency: { type: 'string', example: 'USD' },
+                    is_provisional: { type: 'boolean' },
+                    sort_order: { type: 'integer', nullable: true },
+                    is_active: { type: 'boolean' },
+            } } } },
+          },
+          responses: { 200: { description: 'data.tier' }, 404: { description: 'Tier not found' }, 422: { description: 'Validation failed' } },
+        },
+      },
+      '/admin/membership-applications': {
+        get: {
+          tags: ['Admin'],
+          summary: 'Membership applications, newest first',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'status', in: 'query', schema: { type: 'string', enum: ['new', 'invoiced', 'paid', 'rejected'] } }],
+          responses: { 200: { description: 'data = { applications (each with tier_name), summary: count per status }' } },
+        },
+      },
+      '/admin/membership-applications/{id}': {
+        patch: {
+          tags: ['Admin'],
+          summary: 'Set an application\'s status or notes',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', properties: {
+              status: { type: 'string', enum: ['new', 'invoiced', 'paid', 'rejected'] },
+              admin_notes: { type: 'string', nullable: true },
+            } } } },
+          },
+          responses: { 200: { description: 'data.application' }, 404: { description: 'Application not found' }, 422: { description: 'Validation failed' } },
+        },
+      },
+      '/admin/membership-applications/{id}/activate': {
+        post: {
+          tags: ['Admin'],
+          summary: 'Activate a paid membership',
+          description: 'Creates the member business from the application (or renews the linked one) with membership_status active and expiry now + months, marks the application paid and links business_id, in one transaction. latitude/longitude may be left out when the application or linked business already has a location.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: {
+            content: { 'application/json': { schema: { type: 'object', properties: {
+              latitude: { type: 'number' },
+              longitude: { type: 'number' },
+              months: { type: 'integer', default: 12, minimum: 1, maximum: 120 },
+            } } } },
+          },
+          responses: {
+            200: { description: 'data = { business, application }' },
+            400: { description: 'No location on the application and none given' },
+            404: { description: 'Application not found' },
+            422: { description: 'Validation failed' },
+          },
+        },
+      },
+      '/admin/membership-settings': {
+        get: {
+          tags: ['Admin'],
+          summary: 'Payment instructions and contact email for the membership page',
+          security: [{ bearerAuth: [] }],
+          responses: { 200: { description: 'data.settings = { payment_instructions, contact_email, updated_at }' } },
+        },
+        put: {
+          tags: ['Admin'],
+          summary: 'Save the payment instructions and/or contact email',
+          description: 'A field left out keeps its value. Empty payment instructions make the membership page say the team will email an invoice. Application notices go to contact_email, or to ADMIN_EMAIL when it is empty.',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', properties: {
+              payment_instructions: { type: 'string', maxLength: 5000 },
+              contact_email: { type: 'string', nullable: true },
+            } } } },
+          },
+          responses: { 200: { description: 'data.settings' }, 422: { description: 'Validation failed' } },
         },
       },
     },

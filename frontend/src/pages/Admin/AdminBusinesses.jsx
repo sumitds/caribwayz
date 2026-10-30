@@ -1,149 +1,207 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getBusinesses, addBusiness, updateBusiness } from '../../api/admin';
+import { getBusinesses, addBusiness, updateBusiness, getMembershipTiers } from '../../api/admin';
 import Layout from '../../components/Layout/Layout';
 import Button from '../../components/UI/Button';
 import Input from '../../components/UI/Input';
 import Modal from '../../components/UI/Modal';
-import { MdAdd, MdBusiness, MdStar } from 'react-icons/md';
-import { formatDistanceToNow } from 'date-fns';
+import LocationPicker from '../../components/UI/LocationPicker';
+import { MdAdd, MdBusiness, MdEdit, MdLocalOffer, MdPlace, MdVisibility, MdVisibilityOff } from 'react-icons/md';
+import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import {
+  MEMBERSHIP_STATUSES, EMPTY_BUSINESS_FORM, businessFormFrom, businessPayload, isShownOnMap, isPromoLive,
+  tierRangeShort, apiMessage,
+} from './memberAdminModel';
+import {
+  StatusPill, Field, FilterChips, PageHeader, EmptyState, ErrorState, selectStyle, textareaStyle, smallButton,
+} from './memberUi';
 
-const TIERS = [
-  { key: 'journey', label: 'Journey', color: '#888', desc: 'Proximity targeting, map listing, verified badge' },
-  { key: 'stride', label: 'Stride', color: '#F5A623', desc: 'Journey + In-app promotions, geo-triggers, custom profile' },
-  { key: 'wayz_up', label: 'Wayz Up', color: '#CC2229', desc: 'Stride + Group visibility, offline tools, monthly insights' },
-];
+const when = (iso) => (iso ? format(new Date(iso), 'dd MMM yyyy, HH:mm') : null);
 
-const SIZES = ['small', 'medium', 'large'];
+const BusinessForm = ({ initial, tiers, submitting, onSubmit, submitLabel }) => {
+  const [form, setForm] = useState(initial);
+  const [errors, setErrors] = useState({});
+  const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
-const selectStyle = {
-  background: 'var(--bg-input)', border: '1px solid var(--border)',
-  borderRadius: 'var(--radius)', color: 'var(--text)',
-  padding: '0.65rem 0.9rem', fontSize: '0.93rem', width: '100%',
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const result = businessPayload(form);
+    if (result.errors) {
+      setErrors(result.errors);
+      return;
+    }
+    setErrors({});
+    onSubmit(result.body);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+      <Input label="Business name *" value={form.name} onChange={set('name')} error={errors.name} maxLength={255} />
+      <Input label="Category" placeholder="e.g. restaurant, gas station, hotel" value={form.category} onChange={set('category')} maxLength={100} />
+
+      <LocationPicker
+        latitude={form.latitude}
+        longitude={form.longitude}
+        onPick={(latitude, longitude) => setForm({ ...form, latitude: String(latitude), longitude: String(longitude) })}
+      />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+        <Input label="Latitude *" inputMode="decimal" value={form.latitude} onChange={set('latitude')} error={errors.latitude} />
+        <Input label="Longitude *" inputMode="decimal" value={form.longitude} onChange={set('longitude')} error={errors.longitude} />
+      </div>
+      <Input label="Address" value={form.address} onChange={set('address')} maxLength={1000} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+        <Input label="Phone" type="tel" value={form.phone} onChange={set('phone')} maxLength={40} />
+        <Input label="Website" value={form.website} onChange={set('website')} error={errors.website} maxLength={1000} />
+      </div>
+      <Field label="Description" htmlFor="business-description">
+        <textarea id="business-description" rows={3} value={form.description} onChange={set('description')} maxLength={5000} style={textareaStyle} />
+      </Field>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+        <Input label="Contact email" type="email" value={form.contact_email} onChange={set('contact_email')} error={errors.contact_email} />
+        <Input label="Employees" inputMode="numeric" value={form.employee_count} onChange={set('employee_count')} error={errors.employee_count} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+        <Field label="Membership tier" htmlFor="business-tier">
+          <select id="business-tier" value={form.tier_id} onChange={set('tier_id')} style={selectStyle}>
+            <option value="">No tier</option>
+            {tiers.map((t) => (
+              <option key={t.id} value={String(t.id)}>{t.name} ({tierRangeShort(t)}){t.is_active ? '' : ' - inactive'}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Membership status" htmlFor="business-status" error={errors.membership_status}>
+          <select id="business-status" value={form.membership_status} onChange={set('membership_status')} style={{ ...selectStyle, textTransform: 'capitalize' }}>
+            {MEMBERSHIP_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Input label="Membership expires (empty = no expiry)" type="datetime-local" value={form.membership_expires_at}
+        onChange={set('membership_expires_at')} error={errors.membership_expires_at} />
+
+      <Field label="Promotion or discount (spoken in the app, at most 280 characters)" htmlFor="business-promo" error={errors.promo_text}>
+        <textarea id="business-promo" rows={2} value={form.promo_text} onChange={set('promo_text')} maxLength={280} style={textareaStyle}
+          placeholder="e.g. 10% off for CaribWayz drivers" />
+      </Field>
+      <Input label="Promotion ends (empty = runs until removed)" type="datetime-local" value={form.promo_expires_at}
+        onChange={set('promo_expires_at')} error={errors.promo_expires_at} />
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+        <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
+        Listed (unticked hides it from the app whatever its status)
+      </label>
+
+      <Button type="submit" fullWidth loading={submitting}>{submitLabel}</Button>
+    </form>
+  );
 };
 
 const AdminBusinesses = () => {
-  const [tierFilter, setTierFilter] = useState('all');
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: '', category: '', latitude: '', longitude: '', address: '', phone: '', website: '', description: '', membership_tier: 'journey', business_size: 'small' });
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [editing, setEditing] = useState(null); // null, 'new', or the business being edited
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-businesses', tierFilter],
-    queryFn: () => getBusinesses(tierFilter !== 'all' ? { tier: tierFilter } : {}),
+  const businessesQuery = useQuery({
+    queryKey: ['admin-businesses', statusFilter],
+    queryFn: () => getBusinesses(statusFilter !== 'all' ? { membership_status: statusFilter } : {}),
     select: (res) => res.data.data.businesses,
   });
 
+  const tiersQuery = useQuery({
+    queryKey: ['admin-membership-tiers'],
+    queryFn: getMembershipTiers,
+    select: (res) => res.data.data.tiers,
+  });
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-businesses'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+  };
+
   const addMutation = useMutation({
     mutationFn: addBusiness,
-    onSuccess: () => {
-      queryClient.invalidateQueries(['admin-businesses']);
-      queryClient.invalidateQueries(['admin-stats']);
-      toast.success('Business added!');
-      setShowAdd(false);
-      setForm({ name: '', category: '', latitude: '', longitude: '', address: '', phone: '', website: '', description: '', membership_tier: 'journey', business_size: 'small' });
-    },
-    onError: (err) => toast.error(err.response?.data?.message || 'Failed to add business'),
+    onSuccess: () => { refresh(); toast.success('Business added'); setEditing(null); },
+    onError: (err) => toast.error(apiMessage(err, 'Failed to add business')),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => updateBusiness(id, data),
-    onSuccess: () => { queryClient.invalidateQueries(['admin-businesses']); toast.success('Business updated'); },
+    onSuccess: () => { refresh(); toast.success('Business updated'); setEditing(null); },
+    onError: (err) => toast.error(apiMessage(err, 'Failed to update business')),
   });
 
-  const handleAdd = (e) => {
-    e.preventDefault();
-    if (!form.name || !form.latitude || !form.longitude) return toast.error('Name and coordinates required');
-    addMutation.mutate(form);
-  };
-
-  const getTierMeta = (key) => TIERS.find((t) => t.key === key) || TIERS[0];
+  const businesses = businessesQuery.data || [];
+  const tiers = tiersQuery.data || [];
+  const now = new Date();
 
   return (
     <Layout>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.75rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <MdBusiness size={26} color="#F5A623" /> Business Listings
-          </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.3rem' }}>
-            Manage Journey, Stride, and Wayz Up membership businesses
-          </p>
-        </div>
-        <Button onClick={() => setShowAdd(true)}><MdAdd size={18} /> Add Business</Button>
-      </div>
+      <PageHeader
+        icon={MdBusiness}
+        title="Member Businesses"
+        subtitle="Businesses that pay a yearly membership. Active, listed and unexpired members show on the map and are announced to drivers nearby."
+        action={<Button onClick={() => setEditing('new')}><MdAdd size={18} /> Add Business</Button>}
+      />
 
-      {/* Tier summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        {TIERS.map(({ key, label, color, desc }) => (
-          <button
-            key={key}
-            onClick={() => setTierFilter(tierFilter === key ? 'all' : key)}
-            style={{
-              background: tierFilter === key ? `${color}18` : 'var(--bg-card)',
-              border: `1px solid ${tierFilter === key ? color : 'var(--border)'}`,
-              borderRadius: 'var(--radius)', padding: '0.9rem 1.1rem',
-              cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
-              <MdStar size={16} color={color} />
-              <span style={{ fontSize: '0.9rem', fontWeight: 700, color }}>{label}</span>
-            </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>{desc}</div>
-          </button>
-        ))}
-      </div>
+      <FilterChips options={['all', ...MEMBERSHIP_STATUSES]} value={statusFilter} onChange={setStatusFilter} />
 
-      {/* Filter */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.2rem' }}>
-        {['all', ...TIERS.map((t) => t.key)].map((k) => (
-          <button key={k} onClick={() => setTierFilter(k)} style={{
-            padding: '0.3rem 0.85rem', borderRadius: 20, border: 'none', cursor: 'pointer',
-            background: tierFilter === k ? '#CC2229' : 'var(--bg-card)',
-            color: tierFilter === k ? '#fff' : 'var(--text-muted)',
-            fontSize: '0.8rem', fontWeight: 600, textTransform: 'capitalize',
-          }}>
-            {k === 'all' ? 'All' : k.replace('_', ' ')}
-          </button>
-        ))}
-      </div>
-
-      {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Loading...</div>
-      ) : data?.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)', background: 'var(--bg-card)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-          <MdBusiness size={48} style={{ marginBottom: '1rem', opacity: 0.3 }} />
-          <p>No businesses in this tier</p>
-        </div>
+      {businessesQuery.isLoading ? (
+        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Loading businesses...</div>
+      ) : businessesQuery.isError ? (
+        <ErrorState message={apiMessage(businessesQuery.error, 'Could not load the businesses.')} onRetry={() => businessesQuery.refetch()} />
+      ) : businesses.length === 0 ? (
+        <EmptyState icon={MdBusiness}>
+          <p>{statusFilter === 'all' ? 'No member businesses yet. Add one, or activate a paid application.' : `No ${statusFilter} businesses.`}</p>
+        </EmptyState>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-          {data?.map((b) => {
-            const tier = getTierMeta(b.membership_tier);
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '1rem' }}>
+          {businesses.map((b) => {
+            const onMap = isShownOnMap(b, now);
+            const promoLive = isPromoLive(b, now);
             return (
-              <div key={b.id} style={{ background: 'var(--bg-card)', border: `1px solid ${tier.color}33`, borderRadius: 'var(--radius)', padding: '1.2rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+              <div key={b.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '0.97rem' }}>{b.name}</div>
                     {b.category && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'capitalize', marginTop: '0.1rem' }}>{b.category}</div>}
                   </div>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: tier.color, background: `${tier.color}18`, padding: '0.2rem 0.55rem', borderRadius: 20, textTransform: 'capitalize', flexShrink: 0 }}>
-                    {tier.label}
-                  </span>
+                  <StatusPill status={b.membership_status} />
                 </div>
-                {b.address && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>{b.address}</div>}
-                {b.phone && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>{b.phone}</div>}
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.5rem', marginBottom: '0.75rem', textTransform: 'capitalize' }}>
-                  {b.business_size} · {formatDistanceToNow(new Date(b.created_at), { addSuffix: true })}
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: onMap ? '#2D8C00' : '#888', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <MdPlace size={14} /> {onMap ? 'Shown on the map' : 'Not shown on the map'}
                 </div>
-                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                  {TIERS.filter((t) => t.key !== b.membership_tier).map((t) => (
-                    <button key={t.key} onClick={() => updateMutation.mutate({ id: b.id, data: { membership_tier: t.key } })}
-                      style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: 20, border: `1px solid ${t.color}55`, background: 'none', color: t.color, cursor: 'pointer' }}>
-                      → {t.label}
-                    </button>
-                  ))}
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {b.tier_name || 'No tier'}
+                  {b.employee_count ? ` · ${b.employee_count} employees` : ''}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {b.membership_expires_at ? `Expires ${when(b.membership_expires_at)}` : 'No expiry set'}
+                </div>
+                {b.promo_text && (
+                  <div style={{ fontSize: '0.8rem', display: 'flex', gap: '0.3rem', alignItems: 'flex-start', color: promoLive ? '#B26A00' : '#888' }}>
+                    <MdLocalOffer size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>
+                      {b.promo_text}
+                      {b.promo_expires_at && ` (${promoLive ? 'until' : 'ended'} ${when(b.promo_expires_at)})`}
+                    </span>
+                  </div>
+                )}
+                {b.address && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{b.address}</div>}
+                {b.phone && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{b.phone}</div>}
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                  <button type="button" onClick={() => setEditing(b)} style={smallButton('#0E7AC4')}>
+                    <MdEdit size={14} /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updateMutation.isPending}
+                    onClick={() => updateMutation.mutate({ id: b.id, data: { is_active: b.is_active === false } })}
+                    style={smallButton('#888888')}
+                  >
+                    {b.is_active === false ? <><MdVisibility size={14} /> List</> : <><MdVisibilityOff size={14} /> Unlist</>}
+                  </button>
                 </div>
               </div>
             );
@@ -151,36 +209,18 @@ const AdminBusinesses = () => {
         </div>
       )}
 
-      {showAdd && (
-        <Modal title="Add Business Listing" onClose={() => setShowAdd(false)}>
-          <form onSubmit={handleAdd} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-            <Input label="Business Name *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <Input label="Category" placeholder="e.g. restaurant, gas station, hotel" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Membership Tier</label>
-                <select value={form.membership_tier} onChange={(e) => setForm({ ...form, membership_tier: e.target.value })} style={selectStyle}>
-                  {TIERS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Size</label>
-                <select value={form.business_size} onChange={(e) => setForm({ ...form, business_size: e.target.value })} style={selectStyle}>
-                  {SIZES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              <Input label="Latitude *" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} />
-              <Input label="Longitude *" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} />
-            </div>
-            <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-            <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            <Input label="Website" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
-            <Button type="submit" fullWidth loading={addMutation.isPending}>Add Business</Button>
-          </form>
+      {editing && (
+        <Modal title={editing === 'new' ? 'Add Member Business' : `Edit ${editing.name}`} onClose={() => setEditing(null)} width="620px">
+          <BusinessForm
+            key={editing === 'new' ? 'new' : editing.id}
+            initial={editing === 'new' ? { ...EMPTY_BUSINESS_FORM } : businessFormFrom(editing)}
+            tiers={tiers}
+            submitting={addMutation.isPending || updateMutation.isPending}
+            submitLabel={editing === 'new' ? 'Add Business' : 'Save Changes'}
+            onSubmit={(body) => (editing === 'new'
+              ? addMutation.mutate(body)
+              : updateMutation.mutate({ id: editing.id, data: body }))}
+          />
         </Modal>
       )}
     </Layout>

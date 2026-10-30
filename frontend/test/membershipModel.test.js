@@ -1,0 +1,139 @@
+// The public /membership page (api: GET /members/tiers, POST /members/apply).
+// Run with: npm test (node --test).
+
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  EMPTY_FORM, HONEYPOT_FIELD, FEE_TO_BE_CONFIRMED, INVOICE_BY_EMAIL, formatFee, tierRange, tierForCount, buildApplication,
+  thankYou, fieldErrorsFrom, submitErrorMessage,
+} from '../src/pages/Public/membershipModel.js';
+
+// As GET /members/tiers answers with the seeded tiers.
+const TIERS = [
+  { id: 1, name: '1-15 employees', min_employees: 1, max_employees: 15, annual_fee: 20, currency: 'USD', is_provisional: true },
+  { id: 2, name: '16-40 employees', min_employees: 16, max_employees: 40, annual_fee: 50, currency: 'USD', is_provisional: true },
+  { id: 3, name: '41-99 employees', min_employees: 41, max_employees: 99, annual_fee: null, currency: 'USD', is_provisional: true },
+  { id: 4, name: '100 or more employees', min_employees: 100, max_employees: null, annual_fee: 100, currency: 'USD', is_provisional: true },
+];
+
+const apiError = (status, body) => ({ response: { status, data: body } });
+
+describe('tiers on the page', () => {
+  test('fees read as an amount, and a fee not set as "Fee to be confirmed"', () => {
+    assert.equal(formatFee(TIERS[0]), 'USD 20.00 a year');
+    assert.equal(formatFee(TIERS[2]), FEE_TO_BE_CONFIRMED);
+    assert.equal(formatFee({ annual_fee: 12.5, currency: 'JMD' }), 'JMD 12.50 a year');
+    assert.equal(formatFee(null), FEE_TO_BE_CONFIRMED);
+  });
+
+  test('ranges, including the open-ended top tier', () => {
+    assert.equal(tierRange(TIERS[0]), '1 to 15 employees');
+    assert.equal(tierRange(TIERS[3]), '100 or more employees');
+    assert.equal(tierRange({ min_employees: 1, max_employees: 1 }), '1 employee');
+  });
+
+  test('the hint under the employee field matches the bracket', () => {
+    assert.equal(tierForCount(TIERS, '15').id, 1);
+    assert.equal(tierForCount(TIERS, '16').id, 2);
+    assert.equal(tierForCount(TIERS, '50').id, 3);
+    assert.equal(tierForCount(TIERS, '100000').id, 4);
+    for (const bad of ['', '0', '-3', '2.5', 'ten']) assert.equal(tierForCount(TIERS, bad), null, bad);
+    assert.equal(tierForCount(undefined, '5'), null);
+  });
+});
+
+describe('buildApplication', () => {
+  const filled = { ...EMPTY_FORM, business_name: ' Island Grill ', contact_name: 'Asha', email: 'asha@grill.test', employee_count: '12' };
+
+  test('sends trimmed required fields and only the optional ones filled in', () => {
+    assert.deepEqual(buildApplication({ ...filled, phone: '+1 876 555 0100', message: '  ' }), {
+      body: { business_name: 'Island Grill', contact_name: 'Asha', email: 'asha@grill.test', employee_count: 12, phone: '+1 876 555 0100' },
+    });
+  });
+
+  test('every required field is checked, with a message for each', () => {
+    const { errors } = buildApplication({ ...EMPTY_FORM });
+    assert.deepEqual(Object.keys(errors).sort(), ['business_name', 'contact_name', 'email', 'employee_count']);
+  });
+
+  test('employee count must be a whole number from 1 to 1000000', () => {
+    for (const bad of ['0', '-1', '2.5', '1e3', 'twelve', '1000001', ' ']) {
+      assert.ok(buildApplication({ ...filled, employee_count: bad }).errors.employee_count, bad);
+    }
+    assert.equal(buildApplication({ ...filled, employee_count: '1000000' }).body.employee_count, 1000000);
+  });
+
+  test('a bad email, phone, or text over its limit is refused', () => {
+    assert.ok(buildApplication({ ...filled, email: 'asha@' }).errors.email);
+    assert.ok(buildApplication({ ...filled, phone: 'call me' }).errors.phone);
+    assert.ok(buildApplication({ ...filled, message: 'x'.repeat(2001) }).errors.message);
+    assert.ok(buildApplication({ ...filled, business_name: 'A' }).errors.business_name);
+    assert.equal(buildApplication({ ...filled, message: 'x'.repeat(2000) }).body.message.length, 2000);
+  });
+});
+
+describe('website and the hidden field', () => {
+  const filled = { ...EMPTY_FORM, business_name: 'Island Grill', contact_name: 'Asha', email: 'asha@grill.test', employee_count: '12' };
+
+  test('a website must be http or https; a bare www address is fine', () => {
+    for (const bad of ['javascript:alert(1)', 'intent://scan/#Intent;end', 'mailto:a@b.com', 'grill']) {
+      assert.ok(buildApplication({ ...filled, website: bad }).errors.website, bad);
+    }
+    assert.equal(buildApplication({ ...filled, website: ' www.grill.example ' }).body.website, 'www.grill.example');
+    assert.equal(buildApplication({ ...filled, website: 'https://grill.example/menu' }).body.website, 'https://grill.example/menu');
+  });
+
+  test('the hidden field is sent only when something filled it', () => {
+    assert.equal(HONEYPOT_FIELD, 'cw_hp');
+    assert.equal(EMPTY_FORM[HONEYPOT_FIELD], '');
+    assert.equal(HONEYPOT_FIELD in buildApplication(filled).body, false);
+    assert.equal(buildApplication({ ...filled, [HONEYPOT_FIELD]: 'bot' }).body[HONEYPOT_FIELD], 'bot');
+  });
+});
+
+describe('the thank-you screen', () => {
+  test('shows the fee and the payment instructions when the admin has set them', () => {
+    assert.deepEqual(thankYou({
+      application_id: 'a', payment_instructions: 'Bank: NCB\nAccount 123',
+      tier: { name: '1-15 employees', annual_fee: 20, currency: 'USD', is_provisional: true },
+    }), { tierName: '1-15 employees', fee: 'USD 20.00 a year', provisional: true, instructions: 'Bank: NCB\nAccount 123' });
+  });
+
+  test('without instructions the page says the invoice will be emailed', () => {
+    const t = thankYou({ application_id: 'a', payment_instructions: '   ', tier: { name: '41-99 employees', annual_fee: null, currency: 'USD', is_provisional: true } });
+    assert.equal(t.instructions, null);
+    assert.equal(t.fee, FEE_TO_BE_CONFIRMED);
+    assert.equal(INVOICE_BY_EMAIL, "We'll email you an invoice.");
+  });
+
+  test('no tier fitted: the fee is to be confirmed', () => {
+    assert.deepEqual(thankYou({ application_id: 'a', payment_instructions: '', tier: null }),
+      { tierName: null, fee: FEE_TO_BE_CONFIRMED, provisional: false, instructions: null });
+  });
+});
+
+describe('submission failures', () => {
+  test('the API field messages show next to their fields', () => {
+    const err = apiError(400, { success: false, errors: [
+      { path: 'email', msg: 'A valid email address is required' },
+      { path: 'email', msg: 'second message ignored' },
+      { path: 'employee_count', msg: 'Number of employees must be a whole number from 1 to 1000000' },
+    ] });
+    assert.deepEqual(fieldErrorsFrom(err), {
+      email: 'A valid email address is required',
+      employee_count: 'Number of employees must be a whole number from 1 to 1000000',
+    });
+    assert.equal(fieldErrorsFrom(apiError(500, {})), null);
+    assert.equal(fieldErrorsFrom(apiError(400, { errors: [] })), null);
+    assert.equal(fieldErrorsFrom(new Error('Network Error')), null);
+  });
+
+  test('one sentence for each kind of failure', () => {
+    assert.equal(submitErrorMessage(apiError(429, { message: 'Too many applications from this connection.' })), 'Too many applications from this connection.');
+    assert.match(submitErrorMessage(apiError(429, {})), /wait an hour/);
+    assert.match(submitErrorMessage(apiError(400, {})), /Check the fields/);
+    assert.match(submitErrorMessage(new Error('Network Error')), /could not reach CaribWayz/);
+    assert.match(submitErrorMessage(apiError(500, {})), /not sent/);
+  });
+});

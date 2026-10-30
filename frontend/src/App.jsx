@@ -29,8 +29,16 @@ import AdminReports from './pages/Admin/AdminReports';
 import AdminBusinesses from './pages/Admin/AdminBusinesses';
 import AdminBroadcast from './pages/Admin/AdminBroadcast';
 import AdminPartners from './pages/Admin/AdminPartners';
-import AdminSponsorships from './pages/Admin/AdminSponsorships';
+import AdminTiers from './pages/Admin/AdminTiers';
+import AdminApplications from './pages/Admin/AdminApplications';
+import AdminMembershipSettings from './pages/Admin/AdminMembershipSettings';
 import AdminPayouts from './pages/Admin/AdminPayouts';
+
+// Public pages, no login
+import MembershipPage from './pages/Public/MembershipPage';
+import LegalPage from './pages/Public/LegalPage';
+import privacyPolicy from './legal/privacyPolicy';
+import termsOfService from './legal/termsOfService';
 
 const App = () => (
   <AuthProvider>
@@ -40,6 +48,11 @@ const App = () => (
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+      {/* Public: the membership page and the store listings' legal pages. */}
+      <Route path="/membership" element={<MembershipPage />} />
+      <Route path="/privacy" element={<LegalPage markdown={privacyPolicy} />} />
+      <Route path="/terms" element={<LegalPage markdown={termsOfService} />} />
 
       {/* User routes */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -64,7 +77,9 @@ const App = () => (
       <Route path="/admin/reports" element={<ProtectedRoute adminOnly><AdminReports /></ProtectedRoute>} />
       <Route path="/admin/businesses" element={<ProtectedRoute adminOnly><AdminBusinesses /></ProtectedRoute>} />
       <Route path="/admin/partners" element={<ProtectedRoute adminOnly><AdminPartners /></ProtectedRoute>} />
-      <Route path="/admin/sponsorships" element={<ProtectedRoute adminOnly><AdminSponsorships /></ProtectedRoute>} />
+      <Route path="/admin/membership-tiers" element={<ProtectedRoute adminOnly><AdminTiers /></ProtectedRoute>} />
+      <Route path="/admin/membership-applications" element={<ProtectedRoute adminOnly><AdminApplications /></ProtectedRoute>} />
+      <Route path="/admin/membership-settings" element={<ProtectedRoute adminOnly><AdminMembershipSettings /></ProtectedRoute>} />
       <Route path="/admin/payouts" element={<ProtectedRoute adminOnly><AdminPayouts /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
