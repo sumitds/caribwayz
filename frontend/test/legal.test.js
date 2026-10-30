@@ -28,7 +28,7 @@ describe('the legal text', () => {
     for (const [text, title] of [[privacyPolicy, 'CaribWayz Privacy Policy'], [termsOfService, 'CaribWayz Terms of Service']]) {
       const doc = parseLegalDocument(text);
       assert.equal(doc.title, title);
-      assert.equal(doc.version, '0.1 (draft)');
+      assert.equal(doc.version, '0.2 (draft)');
       assert.match(doc.lastUpdated, /2026/);
       assert.ok(doc.blocks.some((b) => b.type === 'heading' && b.level === 2));
       assert.ok(doc.blocks.some((b) => b.type === 'bullet'));

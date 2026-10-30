@@ -8,13 +8,13 @@ const termsOfService = `# CaribWayz Terms of Service
 
 > DRAFT - pending legal review. This text has not yet been approved by a lawyer and may change before it takes effect.
 
-Version: 0.1 (draft)
+Version: 0.2 (draft)
 
-Last updated: 15 October 2026
+Last updated: 30 October 2026
 
 ## 1. About these terms
 
-These terms are an agreement between you and [Company legal name], a company registered in [Country of registration] under number [Company registration number], with its registered address at [Registered business address] ("CaribWayz", "we", "us" or "our"). They cover your use of the CaribWayz app and the services we provide through it.
+These terms are an agreement between you and CARIBWAYZ, a company registered in Jamaica under number [Company registration number], with its registered address at 18 Phoenix, Greater Portmore, Jamaica ("CaribWayz", "we", "us" or "our"). They cover your use of the CaribWayz app and the services we provide through it.
 
 By creating an account or using the app, you agree to these terms and confirm that you have read our Privacy Policy, which explains how we handle your information. If you do not agree, please do not use CaribWayz.
 
@@ -26,7 +26,7 @@ By creating an account or using the app, you agree to these terms and confirm th
 
 ## 3. Your account
 
-You are responsible for keeping your sign-in details secure and for everything done with your account. Tell us straight away at support@caribwayz.com if you think someone else has used it.
+You are responsible for keeping your sign-in details secure and for everything done with your account. Tell us straight away at merakijt27@gmail.com if you think someone else has used it.
 
 You can stop using CaribWayz and delete your account at any time from Settings > Account & Profile > Delete Account.
 
@@ -147,7 +147,7 @@ We may update these terms when the service or the law changes. We will show the 
 
 ## 18. Governing law and disputes
 
-These terms are governed by the laws of Jamaica. If there is a dispute, please contact us first at support@caribwayz.com so we can try to resolve it. If we cannot, the courts of Jamaica will have jurisdiction, although if you live elsewhere you may also have the right to bring a claim in your own country's courts.
+These terms are governed by the laws of Jamaica. If there is a dispute, please contact us first at merakijt27@gmail.com so we can try to resolve it. If we cannot, the courts of Jamaica will have jurisdiction, although if you live elsewhere you may also have the right to bring a claim in your own country's courts.
 
 ## 19. App store terms
 
@@ -167,11 +167,11 @@ If any part of these terms cannot be enforced, the rest still applies. If we do 
 
 ## 21. Contact us
 
-[Company legal name]
+CARIBWAYZ
 
-[Registered business address]
+18 Phoenix, Greater Portmore, Jamaica
 
-Email: support@caribwayz.com
+Email: merakijt27@gmail.com
 `;
 
 export default termsOfService;

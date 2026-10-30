@@ -8,17 +8,17 @@ const privacyPolicy = `# CaribWayz Privacy Policy
 
 > DRAFT - pending legal review. This text has not yet been approved by a lawyer and may change before it takes effect.
 
-Version: 0.1 (draft)
+Version: 0.2 (draft)
 
-Last updated: 15 October 2026
+Last updated: 30 October 2026
 
 ## 1. Who we are
 
-CaribWayz is a navigation and road-safety app for Jamaica and the wider Caribbean. In this policy, "CaribWayz", "we", "us" and "our" mean [Company legal name], a company registered in [Country of registration] under number [Company registration number], with its registered address at [Registered business address].
+CaribWayz is a navigation and road-safety app for Jamaica and the wider Caribbean. In this policy, "CaribWayz", "we", "us" and "our" mean CARIBWAYZ, a company registered in Jamaica under number [Company registration number], with its registered address at 18 Phoenix, Greater Portmore, Jamaica.
 
 We decide how and why your personal information is used, so we are the "data controller" for it under Jamaica's Data Protection Act, 2020 and similar laws elsewhere in the Caribbean.
 
-You can contact us about anything in this policy at support@caribwayz.com. Our Data Protection Officer is [Data Protection Officer name], who you can reach at [Data Protection Officer email].
+You can contact us about anything in this policy at merakijt27@gmail.com. Our Data Protection Officer is [Data Protection Officer name], who you can reach at [Data Protection Officer email].
 
 ## 2. What this policy covers
 
@@ -83,6 +83,7 @@ Your location is sent to our servers only in these cases:
 - SOS and crash alerts. When you send an alert to the CaribWayz team, your position at that moment is sent with it.
 - Road reports. When you post a road report, the place you reported is stored with it.
 - Saved routes. When you save a route, its start and end points and addresses are stored with your account.
+- Member businesses. To show CaribWayz member businesses near you, on the map, in Businesses and while you drive, the app sends your position at that moment to our servers. It is used only to find the businesses near it and is not stored.
 
 We do not keep a record on our servers of everywhere you drive.
 
@@ -142,7 +143,15 @@ The app uses your camera or photo library only when you choose to take or pick a
 
 If you turn on the app lock, your phone checks your face, fingerprint or passcode itself. CaribWayz never receives your biometric data.
 
-### 4.13 Technical information
+### 4.13 Member business announcements
+
+During a trip, the app can say the name of a CaribWayz member business you are close to, with any offer it is running, and ask whether to add it to your route. This is decided on your phone; we are not told whether you heard it or added the business. You can turn it off in Settings > Allow Local Business Notifications.
+
+### 4.14 Businesses that apply to become members
+
+When a business applies for membership on the CaribWayz website, we collect the business name, the contact person's name, email address and phone number, the business address, category, number of employees, website and location, and any message they send. We use these to deal with the application, invoice the yearly fee and, once the membership is active, list the business in the app. The business name, category, address, phone number, website, description and current offer are shown to app users; the contact person's details and the number of employees are not. The contact person can ask us to correct or delete these details at any time.
+
+### 4.15 Technical information
 
 Like any online service, our servers and the services we use receive technical information when your phone connects to them, such as your IP address and the time of the request. We use it to run the service, keep it secure and limit abuse. When something goes wrong on our servers, we record the error and the account it affected, so we can fix it.
 
@@ -155,6 +164,7 @@ We do not use advertising identifiers, analytics or tracking tools, or a crash-r
 - To use your medical details in an emergency: we rely on your explicit consent, given when you switch on "Share medical info on emergency".
 - To use your location while the app is not on screen during a trip: we rely on your consent, given by turning on Navigation alerts and through your phone's location permission.
 - To keep CaribWayz safe and working: preventing misuse, securing accounts, fixing faults and dealing with harmful road reports. We rely on our legitimate interest in running a safe service.
+- To deal with membership applications and list member businesses: we rely on the business's request and on the contract for its membership.
 - To send promotional notifications: only with your consent, which you can withdraw in Settings > Notifications.
 - To meet our legal obligations, and to respond to lawful requests from the authorities.
 
@@ -226,7 +236,7 @@ Under Jamaica's Data Protection Act, 2020, and similar laws in other Caribbean c
 - Ask us not to use your information for direct marketing.
 - Complain to the regulator. In Jamaica this is the Office of the Information Commissioner. In other countries, contact your local data protection authority.
 
-To use any of these rights, contact us at support@caribwayz.com. We may need to confirm who you are first. We will answer within 30 days.
+To use any of these rights, contact us at merakijt27@gmail.com. We may need to confirm who you are first. We will answer within 30 days.
 
 ## 10. Deleting your account
 
@@ -236,7 +246,7 @@ When you delete your account, we delete from our servers your profile and profil
 
 Deletion cannot be undone. Messages other people have already received, such as a text you sent your emergency contact or a group notification, cannot be recalled.
 
-If you cannot use the app, email support@caribwayz.com from the email address on your account, or tell us the phone number you sign in with, and we will delete your account for you.
+If you cannot use the app, email merakijt27@gmail.com from the email address on your account, or tell us the phone number you sign in with, and we will delete your account for you.
 
 Administrator accounts cannot be deleted from the app. They are removed by another administrator.
 
@@ -261,11 +271,11 @@ We may update this policy when the app or the law changes. We will show the new 
 
 ## 14. Contact us
 
-[Company legal name]
+CARIBWAYZ
 
-[Registered business address]
+18 Phoenix, Greater Portmore, Jamaica
 
-Email: support@caribwayz.com
+Email: merakijt27@gmail.com
 
 Data Protection Officer: [Data Protection Officer name], [Data Protection Officer email]
 `;
