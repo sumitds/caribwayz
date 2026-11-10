@@ -104,7 +104,7 @@ describe('the tier form', () => {
     const { body } = tierPayload({ ...EMPTY_TIER_FORM, name: '100 or more', min_employees: '100' });
     assert.deepEqual(body, {
       name: '100 or more', min_employees: 100, max_employees: null, annual_fee: null, currency: 'USD',
-      is_provisional: true, sort_order: null, is_active: true,
+      is_provisional: false, sort_order: null, is_active: true,
     });
   });
 

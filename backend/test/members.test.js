@@ -927,6 +927,14 @@ describe('the application notice email', () => {
   });
 });
 
+/** The client's final tiers (2026-11-09) as migration 026 leaves them, as pg returns them. */
+const FINAL_TIERS = [
+  { name: 'Micro', min_employees: 1, max_employees: 5, annual_fee: '20.00', is_provisional: false },
+  { name: 'Small', min_employees: 6, max_employees: 20, annual_fee: '40.00', is_provisional: false },
+  { name: 'Medium', min_employees: 21, max_employees: 50, annual_fee: '75.00', is_provisional: false },
+  { name: 'Corporate', min_employees: 51, max_employees: null, annual_fee: '125.00', is_provisional: false },
+];
+
 describe('member businesses against Postgres', { skip: !process.env.TEST_DATABASE_URL && 'set TEST_DATABASE_URL to a throwaway database' }, () => {
   let server;
   let base;
@@ -1019,15 +1027,10 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
     await require('../src/config/db').pool.end();
   });
 
-  test('migration 025 seeds the four provisional tiers once, and adds the columns admin add-business writes', async () => {
+  test('migrations 025 then 026 leave the four final tiers, and 025 adds the columns admin add-business writes', async () => {
     const seeded = (await q(`SELECT name, min_employees, max_employees, annual_fee, is_provisional
                                FROM membership_tiers WHERE name NOT LIKE '% ${stamp}' ORDER BY sort_order`)).rows;
-    assert.deepEqual(seeded, [
-      { name: '1-15 employees', min_employees: 1, max_employees: 15, annual_fee: '20.00', is_provisional: true },
-      { name: '16-40 employees', min_employees: 16, max_employees: 40, annual_fee: '50.00', is_provisional: true },
-      { name: '41-99 employees', min_employees: 41, max_employees: 99, annual_fee: null, is_provisional: true },
-      { name: '100 or more employees', min_employees: 100, max_employees: null, annual_fee: '100.00', is_provisional: true },
-    ]);
+    assert.deepEqual(seeded, FINAL_TIERS);
     const columns = (await q(`SELECT column_name FROM information_schema.columns WHERE table_name = 'businesses'`)).rows.map((r) => r.column_name);
     for (const c of ['membership_tier', 'business_size', 'tier_id', 'employee_count', 'contact_email', 'membership_status',
       'membership_expires_at', 'promo_text', 'promo_expires_at', 'updated_at']) {
@@ -1038,6 +1041,60 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
       q(`INSERT INTO businesses (name, latitude, longitude, membership_status) VALUES ('x ${stamp}', 0, 0, 'gold')`),
       /membership_status_check/
     );
+  });
+
+  test('migration 026: replaces only the untouched 025 seed, re-tiers by employee count, keeps quoted fees', async () => {
+    const sql026 = require('node:fs').readFileSync(src('migrations/026_final_membership_tiers.sql'), 'utf8');
+    const own = `name NOT LIKE '% ${stamp}'`;
+    const tiersNow = async () => (await q(`SELECT name, min_employees, max_employees, annual_fee, is_provisional
+                                             FROM membership_tiers WHERE ${own} ORDER BY sort_order`)).rows;
+    const toSeed = () => q(`UPDATE membership_tiers t
+         SET name = v.name, min_employees = v.lo, max_employees = v.hi, annual_fee = v.fee, is_provisional = TRUE
+        FROM (VALUES (1, '1-15 employees', 1, 15, 20.00), (2, '16-40 employees', 16, 40, 50.00),
+                     (3, '41-99 employees', 41, 99, NULL), (4, '100 or more employees', 100, NULL, 100.00))
+             AS v(so, name, lo, hi, fee)
+       WHERE t.sort_order = v.so AND t.${own}`);
+    const tierId = async (sortOrder) => (await q(
+      `SELECT id FROM membership_tiers WHERE sort_order = $1 AND ${own}`, [sortOrder])).rows[0].id;
+    const bizTier = async (id) => (await q('SELECT tier_id FROM businesses WHERE id = $1', [id])).rows[0].tier_id;
+    assert.equal((await q(`SELECT COUNT(*)::int AS n FROM membership_tiers WHERE NOT (${own})`)).rows[0].n, 0,
+      'runs before any test adds a tier, or the table is not the bare seed');
+
+    await toSeed();
+    // Ten employees sat in the old first tier (1-15); under the final tiers that is Small.
+    const biz = (await q(`INSERT INTO businesses (name, latitude, longitude, employee_count, tier_id, membership_status)
+                          VALUES ($1, 0, 0, 10, $2, 'pending') RETURNING id`, [`Retier ${stamp}`, await tierId(1)])).rows[0].id;
+    const noCount = (await q(`INSERT INTO businesses (name, latitude, longitude, tier_id, membership_status)
+                              VALUES ($1, 0, 0, $2, 'pending') RETURNING id`, [`No count ${stamp}`, await tierId(2)])).rows[0].id;
+    const app = (await q(`INSERT INTO membership_applications (business_name, contact_name, email, employee_count, tier_id, quoted_fee)
+                          VALUES ($1, 'Cy', $2, 60, $3, NULL) RETURNING id`,
+      [`Retier app ${stamp}`, `cy-${stamp}@members.test`, await tierId(3)])).rows[0].id;
+
+    await q(sql026);
+    assert.deepEqual(await tiersNow(), FINAL_TIERS);
+    assert.equal(await bizTier(biz), await tierId(2));
+    assert.equal(await bizTier(noCount), await tierId(2), 'no employee count: tier left as it was');
+    assert.deepEqual((await q('SELECT tier_id, quoted_fee FROM membership_applications WHERE id = $1', [app])).rows[0],
+      { tier_id: await tierId(4), quoted_fee: null }, 'quoted fee is what they were told');
+
+    // Re-running on the next boot changes nothing, not even a tier an admin set by hand.
+    await q('UPDATE businesses SET tier_id = $1 WHERE id = $2', [await tierId(1), biz]);
+    await q(sql026);
+    assert.deepEqual(await tiersNow(), FINAL_TIERS);
+    assert.equal(await bizTier(biz), await tierId(1));
+
+    // A seed an admin has already edited (one fee changed) is left alone.
+    await toSeed();
+    await q(`UPDATE membership_tiers SET annual_fee = 30 WHERE sort_order = 1 AND ${own}`);
+    await q(sql026);
+    const edited = await tiersNow();
+    assert.deepEqual([edited[0].name, edited[0].annual_fee, edited[0].is_provisional], ['1-15 employees', '30.00', true]);
+
+    // Back to the final tiers for the rest of the suite.
+    await q(`UPDATE membership_tiers SET annual_fee = 20 WHERE sort_order = 1 AND ${own}`);
+    await q(sql026);
+    assert.deepEqual(await tiersNow(), FINAL_TIERS);
+    await q('DELETE FROM membership_applications WHERE id = $1', [app]);
   });
 
   test('nearby: only listed, active, unexpired members inside the radius, nearest first, as numbers', async () => {
@@ -1083,8 +1140,8 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
     const res = await call(null, 'GET', '/members/tiers');
     assert.equal(res.status, 200);
     const seeded = res.body.data.tiers.filter((t) => !t.name.endsWith(String(stamp)));
-    assert.deepEqual(seeded.map((t) => [t.min_employees, t.max_employees, t.annual_fee]),
-      [[1, 15, 20], [16, 40, 50], [41, 99, null], [100, null, 100]]);
+    assert.deepEqual(seeded.map((t) => [t.name, t.min_employees, t.max_employees, t.annual_fee, t.is_provisional]),
+      [['Micro', 1, 5, 20, false], ['Small', 6, 20, 40, false], ['Medium', 21, 50, 75, false], ['Corporate', 51, null, 125, false]]);
   });
 
   test('apply, invoice, settings, then activate: the business appears on the map', async () => {
@@ -1097,17 +1154,17 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
       employee_count: 250, category: 'hotel', latitude: north(500), longitude: HERE.lng,
     });
     assert.equal(res.status, 201, JSON.stringify(res.body));
-    assert.deepEqual(res.body.data.tier, { name: '100 or more employees', annual_fee: 100, currency: 'USD', is_provisional: true });
+    assert.deepEqual(res.body.data.tier, { name: 'Corporate', annual_fee: 125, currency: 'USD', is_provisional: false });
     assert.equal(res.body.data.payment_instructions, `Bank transfer ${stamp}`);
     const id = res.body.data.application_id;
     const stored = (await q('SELECT status, quoted_fee, employee_count FROM membership_applications WHERE id = $1', [id])).rows[0];
-    assert.deepEqual(stored, { status: 'new', quoted_fee: '100.00', employee_count: 250 });
+    assert.deepEqual(stored, { status: 'new', quoted_fee: '125.00', employee_count: 250 });
 
     res = await call('boss', 'GET', '/admin/membership-applications?status=new');
     assert.equal(res.status, 200);
     const listed = res.body.data.applications.find((a) => a.id === id);
-    assert.equal(listed.tier_name, '100 or more employees');
-    assert.equal(listed.quoted_fee, 100);
+    assert.equal(listed.tier_name, 'Corporate');
+    assert.equal(listed.quoted_fee, 125);
     assert.ok(res.body.data.summary.new >= 1);
 
     res = await call('boss', 'PATCH', `/admin/membership-applications/${id}`, { status: 'invoiced', admin_notes: 'Invoice 001 sent' });
@@ -1118,7 +1175,7 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
     assert.equal(res.status, 200, JSON.stringify(res.body));
     const business = res.body.data.business;
     assert.equal(business.membership_status, 'active');
-    assert.equal(business.tier_name, '100 or more employees');
+    assert.equal(business.tier_name, 'Corporate');
     assert.equal(business.contact_email, `asha-${stamp}@members.test`);
     const months = (new Date(business.membership_expires_at) - Date.now()) / (24 * 60 * 60 * 1000);
     assert.ok(months > 364 && months < 367, `${months} days`);
@@ -1148,8 +1205,12 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
   });
 
   test('apply with a fee not set yet quotes null; activate without any location is refused', async () => {
+    // The final tiers all have fees, so a tier with no fee yet is added for
+    // this test, ahead of Corporate by sort_order for its own range.
+    await q(`INSERT INTO membership_tiers (name, min_employees, max_employees, annual_fee, sort_order)
+             VALUES ($1, 700000, 700010, NULL, 0)`, [`No fee tier ${stamp}`]);
     let res = await call(null, 'POST', '/members/apply', {
-      business_name: `No fee ${stamp}`, contact_name: 'Ben', email: `ben-${stamp}@members.test`, employee_count: 60,
+      business_name: `No fee ${stamp}`, contact_name: 'Ben', email: `ben-${stamp}@members.test`, employee_count: 700005,
     });
     assert.equal(res.status, 201);
     assert.equal(res.body.data.tier.annual_fee, null);
@@ -1170,7 +1231,7 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
     });
     assert.equal(res.status, 201, JSON.stringify(res.body));
     const b = res.body.data.business;
-    assert.equal(b.tier_name, '1-15 employees');
+    assert.equal(b.tier_name, 'Micro');
     assert.equal(typeof b.latitude, 'number');
     assert.equal(b.created_by, users.boss);
 
@@ -1202,7 +1263,7 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
     });
     assert.equal(res.status, 201, JSON.stringify(res.body));
     const tier = res.body.data.tier;
-    assert.deepEqual([tier.max_employees, tier.annual_fee, tier.is_provisional, tier.currency], [null, null, true, 'USD']);
+    assert.deepEqual([tier.max_employees, tier.annual_fee, tier.is_provisional, tier.currency], [null, null, false, 'USD']);
 
     res = await call('boss', 'PATCH', `/admin/membership-tiers/${tier.id}`, { annual_fee: 250.5, is_provisional: false });
     assert.equal(res.status, 200);

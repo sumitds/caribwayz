@@ -134,7 +134,7 @@ export const feeLabel = (amount, currency = 'USD') => (typeof amount === 'number
   : 'Not set');
 
 export const EMPTY_TIER_FORM = Object.freeze({
-  name: '', min_employees: '', max_employees: '', annual_fee: '', currency: 'USD', is_provisional: true, sort_order: '', is_active: true,
+  name: '', min_employees: '', max_employees: '', annual_fee: '', currency: 'USD', is_provisional: false, sort_order: '', is_active: true,
 });
 
 export const tierFormFrom = (t) => ({
