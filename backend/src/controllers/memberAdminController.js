@@ -148,7 +148,7 @@ const buildMemberAdminHandlers = ({ query, getClient }) => {
   /** POST /admin/membership-tiers. The body is validated by the route. */
   const addTier = async (req, res) => {
     try {
-      const body = { currency: 'USD', is_provisional: true, is_active: true, ...req.body };
+      const body = { currency: 'USD', is_provisional: false, is_active: true, ...req.body };
       const { sets, params } = assignments(TIER_FIELDS, body);
       const columns = sets.map((s) => s.split(' = ')[0]);
       const result = await query(

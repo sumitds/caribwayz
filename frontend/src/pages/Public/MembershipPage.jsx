@@ -62,6 +62,7 @@ const TierList = ({ query }) => {
       <ul style={{ listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
         {tiers.map((t) => (
           <li key={t.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '0.9rem 1rem', background: 'var(--bg-input)' }}>
+            <div style={{ fontSize: '1rem', color: '#111', fontWeight: 800 }}>{t.name}</div>
             <div style={{ fontSize: '0.85rem', color: '#444', fontWeight: 600 }}>{tierRange(t)}</div>
             <div style={{ fontSize: '1.15rem', fontWeight: 900, color: t.annual_fee === null ? '#555' : '#2D8C00', marginTop: '0.2rem' }}>
               {t.annual_fee === null ? FEE_TO_BE_CONFIRMED : formatFee(t)}
@@ -210,7 +211,7 @@ const MembershipPage = () => {
                   value={form.phone} onChange={set('phone')} error={errors.phone} />
                 <FormField id="employee_count" label="Number of employees" required inputMode="numeric" maxLength={7}
                   value={form.employee_count} onChange={set('employee_count')} error={errors.employee_count}
-                  hint={hintTier ? `${tierRange(hintTier)}: ${hintTier.annual_fee === null ? FEE_TO_BE_CONFIRMED : formatFee(hintTier)}` : undefined} />
+                  hint={hintTier ? `${hintTier.name} (${tierRange(hintTier)}): ${hintTier.annual_fee === null ? FEE_TO_BE_CONFIRMED : formatFee(hintTier)}` : undefined} />
               </div>
               <FormField id="address" label="Business address" autoComplete="street-address" maxLength={500}
                 value={form.address} onChange={set('address')} error={errors.address} />
