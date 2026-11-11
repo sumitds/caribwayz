@@ -6,6 +6,7 @@ import React from 'react';
 export const STATUS_COLORS = {
   pending: '#F5A623',
   active: '#2D8C00',
+  suspended: '#7B3FA0',
   expired: '#888888',
   cancelled: '#CC2229',
   new: '#0E7AC4',

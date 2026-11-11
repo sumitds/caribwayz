@@ -136,33 +136,44 @@ const buildMembershipHandlers = ({ query, sendNotice, isEmailConfigured, adminCo
       const tier = tierRow ? membership.publicTier(tierRow) : null;
 
       const hasLocation = b.latitude !== undefined && b.latitude !== null && b.latitude !== '';
-      const inserted = await query(
-        `INSERT INTO membership_applications
-           (business_name, contact_name, email, phone, address, category, employee_count,
-            latitude, longitude, website, message, tier_id, quoted_fee)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-         RETURNING id, created_at`,
-        [
-          String(b.business_name).trim(), String(b.contact_name).trim(), String(b.email).trim(),
-          optionalText(b.phone), optionalText(b.address), optionalText(b.category), employeeCount,
-          hasLocation ? Number(b.latitude) : null, hasLocation ? Number(b.longitude) : null,
-          optionalText(b.website), optionalText(b.message),
-          tier ? tier.id : null, tier ? tier.annual_fee : null,
-        ]
-      );
-
       const application = {
-        id: inserted.rows[0].id,
         business_name: String(b.business_name).trim(),
-        contact_name: String(b.contact_name).trim(),
-        email: String(b.email).trim(),
-        phone: optionalText(b.phone),
-        address: optionalText(b.address),
+        trading_name: optionalText(b.trading_name),
         category: optionalText(b.category),
-        employee_count: employeeCount,
+        description: optionalText(b.description),
+        address: optionalText(b.address),
+        phone: optionalText(b.phone),
+        business_email: optionalText(b.business_email),
         website: optionalText(b.website),
+        contact_name: String(b.contact_name).trim(),
+        contact_position: optionalText(b.contact_position),
+        contact_phone: optionalText(b.contact_phone),
+        email: String(b.email).trim(),
+        employee_count: employeeCount,
         message: optionalText(b.message),
       };
+      // The route accepts the form only with accept_terms true, so this is
+      // when the applicant accepted the policy and the terms.
+      const acceptedAt = now();
+      const inserted = await query(
+        `INSERT INTO membership_applications
+           (business_name, trading_name, category, description, address, phone, business_email, website,
+            contact_name, contact_position, contact_phone, email, employee_count,
+            latitude, longitude, message, tier_id, quoted_fee, terms_accepted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         RETURNING id, created_at`,
+        [
+          application.business_name, application.trading_name, application.category, application.description,
+          application.address, application.phone, application.business_email, application.website,
+          application.contact_name, application.contact_position, application.contact_phone, application.email,
+          employeeCount,
+          hasLocation ? Number(b.latitude) : null, hasLocation ? Number(b.longitude) : null,
+          application.message,
+          tier ? tier.id : null, tier ? tier.annual_fee : null,
+          acceptedAt,
+        ]
+      );
+      application.id = inserted.rows[0].id;
       const settingsRow = settings.rows[0] || {};
 
       created(res, {

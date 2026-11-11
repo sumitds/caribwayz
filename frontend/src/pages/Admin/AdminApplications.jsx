@@ -11,7 +11,7 @@ import LocationPicker from '../../components/UI/LocationPicker';
 import { MdAssignment, MdCheckCircle, MdCancel, MdReceipt, MdNotes, MdUndo } from 'react-icons/md';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { APPLICATION_STATUSES, activationPayload, feeLabel, apiMessage } from './memberAdminModel';
+import { APPLICATION_STATUSES, activationPayload, feeLabel, apiMessage, renewalBlocked } from './memberAdminModel';
 import { StatusPill, Field, FilterChips, PageHeader, EmptyState, ErrorState, textareaStyle, smallButton } from './memberUi';
 
 const ActivateForm = ({ application, submitting, onSubmit }) => {
@@ -140,21 +140,25 @@ const AdminApplications = () => {
             <div key={a.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.97rem' }}>{a.business_name}</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.97rem' }}>{a.trading_name || a.business_name}</div>
+                  {a.trading_name && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Registered as {a.business_name}</div>}
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Applied {format(new Date(a.created_at), 'dd MMM yyyy, HH:mm')}</div>
                 </div>
                 <StatusPill status={a.status} />
               </div>
-              <Detail label="Contact">{a.contact_name}</Detail>
-              <Detail label="Email"><a href={`mailto:${a.email}`} style={{ color: '#0E7AC4' }}>{a.email}</a></Detail>
-              <Detail label="Phone">{a.phone}</Detail>
+              <Detail label="Contact">{a.contact_name}{a.contact_position ? ` (${a.contact_position})` : ''}</Detail>
+              <Detail label="Contact email"><a href={`mailto:${a.email}`} style={{ color: '#0E7AC4' }}>{a.email}</a></Detail>
+              <Detail label="Contact phone">{a.contact_phone}</Detail>
+              <Detail label="Business phone">{a.phone}</Detail>
+              <Detail label="Business email">{a.business_email}</Detail>
               <Detail label="Employees">{String(a.employee_count)}</Detail>
               <Detail label="Tier">
                 {a.tier_name ? `${a.tier_name}, ${feeLabel(a.quoted_fee, a.tier_currency || 'USD')} a year` : 'No tier fitted; set the fee by hand'}
               </Detail>
               <Detail label="Category">{a.category}</Detail>
               <Detail label="Address">{a.address}</Detail>
-              <Detail label="Website">{a.website}</Detail>
+              <Detail label="Website or social">{a.website}</Detail>
+              <Detail label="About">{a.description}</Detail>
               <Detail label="Location">{a.latitude !== null ? `${a.latitude}, ${a.longitude}` : null}</Detail>
               {a.message && (
                 <div style={{ fontSize: '0.8rem', background: 'var(--bg-input)', borderRadius: 8, padding: '0.5rem 0.7rem', whiteSpace: 'pre-wrap' }}>{a.message}</div>
@@ -162,7 +166,11 @@ const AdminApplications = () => {
               {a.admin_notes && (
                 <div style={{ fontSize: '0.8rem', color: '#B26A00', whiteSpace: 'pre-wrap' }}>Notes: {a.admin_notes}</div>
               )}
+              <Detail label="Accepted policy and terms">{a.terms_accepted_at ? format(new Date(a.terms_accepted_at), 'dd MMM yyyy, HH:mm') : 'Not recorded (sent before the tick box)'}</Detail>
               {a.business_id && <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#2D8C00' }}>Member listing created</div>}
+              {renewalBlocked(a) && (
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#7B3FA0' }}>Listing suspended: lift the suspension on Member Businesses to renew.</div>
+              )}
 
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                 {a.status === 'new' && (
@@ -170,7 +178,7 @@ const AdminApplications = () => {
                     <MdReceipt size={14} /> Mark invoiced
                   </button>
                 )}
-                {a.status !== 'rejected' && (
+                {a.status !== 'rejected' && !renewalBlocked(a) && (
                   <button type="button" onClick={() => setActivating(a)} style={smallButton('#2D8C00')}>
                     <MdCheckCircle size={14} /> {a.business_id ? 'Renew' : 'Paid: activate'}
                   </button>

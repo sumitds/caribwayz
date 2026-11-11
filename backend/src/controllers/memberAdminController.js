@@ -12,6 +12,7 @@ const BUSINESS_FIELDS = [
   'name', 'category', 'latitude', 'longitude', 'address', 'phone', 'website', 'description', 'image_url',
   'is_active', 'membership_tier', 'business_size', 'tier_id', 'employee_count', 'contact_email',
   'membership_status', 'membership_expires_at', 'promo_text', 'promo_expires_at',
+  'registered_name', 'business_email', 'contact_name', 'contact_position', 'contact_phone',
 ];
 
 const TIER_FIELDS = [
@@ -22,9 +23,13 @@ const BUSINESS_SELECT = `SELECT b.*, t.name AS tier_name
    FROM businesses b
    LEFT JOIN membership_tiers t ON t.id = b.tier_id`;
 
-const APPLICATION_SELECT = `SELECT a.*, t.name AS tier_name, t.currency AS tier_currency
+// business_status is the linked listing's membership_status, so the panel can
+// say a renewal waits for a suspension to be lifted.
+const APPLICATION_SELECT = `SELECT a.*, t.name AS tier_name, t.currency AS tier_currency,
+        lb.membership_status AS business_status
    FROM membership_applications a
-   LEFT JOIN membership_tiers t ON t.id = a.tier_id`;
+   LEFT JOIN membership_tiers t ON t.id = a.tier_id
+   LEFT JOIN businesses lb ON lb.id = a.business_id`;
 
 /** An empty string from a form clears a text or date column. */
 const blankToNull = (value) => (typeof value === 'string' && value.trim() === '' ? null : value);
@@ -240,7 +245,9 @@ const buildMemberAdminHandlers = ({ query, getClient }) => {
    * application, active until now + months, or renews the one already
    * linked: from its current expiry when that is still ahead, so paid time is
    * kept, otherwise from now. Then marks the application paid and links it.
-   * A rejected application is refused (409) until an admin reopens it. One transaction, so a
+   * A rejected application is refused (409) until an admin reopens it, and so
+   * is renewing a suspended listing until an admin lifts the suspension: a
+   * payment must not quietly undo a suspension. One transaction, so a
    * failure halfway leaves neither a listing without a paid application nor
    * the reverse. The location may be left out when the application, or the
    * linked listing, already has one.
@@ -274,8 +281,12 @@ const buildMemberAdminHandlers = ({ query, getClient }) => {
 
       let linked = null;
       if (application.business_id) {
-        const existing = await client.query('SELECT id FROM businesses WHERE id = $1 FOR UPDATE', [application.business_id]);
+        const existing = await client.query('SELECT id, membership_status FROM businesses WHERE id = $1 FOR UPDATE', [application.business_id]);
         linked = existing.rows[0] || null;
+      }
+      if (linked && linked.membership_status === 'suspended') {
+        await client.query('ROLLBACK');
+        return error(res, 'This business is suspended. Lift the suspension on the Member Businesses page before renewing it.', 409);
       }
 
       let businessId;
@@ -303,16 +314,23 @@ const buildMemberAdminHandlers = ({ query, getClient }) => {
           await client.query('ROLLBACK');
           return error(res, 'This application has no location. Give the latitude and longitude of the business.', 400);
         }
+        // The app shows the trading name when the business gave one; the
+        // registered name is kept beside it.
+        const shownName = membership.listingName(application);
         const inserted = await client.query(
           `INSERT INTO businesses
              (name, category, latitude, longitude, address, phone, website, tier_id, employee_count, contact_email,
-              membership_status, membership_expires_at, is_active, created_by)
+              membership_status, membership_expires_at, is_active, created_by,
+              registered_name, description, business_email, contact_name, contact_position, contact_phone)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-              'active', NOW() + make_interval(months => $11), TRUE, $12)
+              'active', NOW() + make_interval(months => $11), TRUE, $12,
+              $13, $14, $15, $16, $17, $18)
            RETURNING id`,
-          [application.business_name, application.category, lat, lng, application.address, application.phone,
+          [shownName, application.category, lat, lng, application.address, application.phone,
            application.website, application.tier_id, application.employee_count, application.email,
-           months, req.user.id]
+           months, req.user.id,
+           application.business_name, application.description ?? null, application.business_email ?? null,
+           application.contact_name, application.contact_position ?? null, application.contact_phone ?? null]
         );
         businessId = inserted.rows[0].id;
       }

@@ -6,12 +6,14 @@ import Button from '../../components/UI/Button';
 import Input from '../../components/UI/Input';
 import Modal from '../../components/UI/Modal';
 import LocationPicker from '../../components/UI/LocationPicker';
-import { MdAdd, MdBusiness, MdEdit, MdLocalOffer, MdPlace, MdVisibility, MdVisibilityOff } from 'react-icons/md';
+import {
+  MdAdd, MdBusiness, MdEdit, MdLocalOffer, MdPause, MdPlace, MdPlayArrow, MdVisibility, MdVisibilityOff,
+} from 'react-icons/md';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
   MEMBERSHIP_STATUSES, EMPTY_BUSINESS_FORM, businessFormFrom, businessPayload, isShownOnMap, isPromoLive,
-  tierRangeShort, apiMessage,
+  tierRangeShort, apiMessage, suspensionAction,
 } from './memberAdminModel';
 import {
   StatusPill, Field, FilterChips, PageHeader, EmptyState, ErrorState, selectStyle, textareaStyle, smallButton,
@@ -37,7 +39,10 @@ const BusinessForm = ({ initial, tiers, submitting, onSubmit, submitLabel }) => 
 
   return (
     <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-      <Input label="Business name *" value={form.name} onChange={set('name')} error={errors.name} maxLength={255} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+        <Input label="Name shown in the app *" value={form.name} onChange={set('name')} error={errors.name} maxLength={255} />
+        <Input label="Registered business name" value={form.registered_name} onChange={set('registered_name')} error={errors.registered_name} maxLength={200} />
+      </div>
       <Input label="Category" placeholder="e.g. restaurant, gas station, hotel" value={form.category} onChange={set('category')} maxLength={100} />
 
       <LocationPicker
@@ -59,9 +64,19 @@ const BusinessForm = ({ initial, tiers, submitting, onSubmit, submitLabel }) => 
       </Field>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-        <Input label="Contact email" type="email" value={form.contact_email} onChange={set('contact_email')} error={errors.contact_email} />
+        <Input label="Business email" type="email" value={form.business_email} onChange={set('business_email')} error={errors.business_email} />
         <Input label="Employees" inputMode="numeric" value={form.employee_count} onChange={set('employee_count')} error={errors.employee_count} />
       </div>
+
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <legend style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 0.3rem' }}>Owner or representative (not shown in the app)</legend>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+          <Input label="Name" value={form.contact_name} onChange={set('contact_name')} error={errors.contact_name} maxLength={200} />
+          <Input label="Position" value={form.contact_position} onChange={set('contact_position')} error={errors.contact_position} maxLength={100} />
+          <Input label="Phone" type="tel" value={form.contact_phone} onChange={set('contact_phone')} error={errors.contact_phone} maxLength={40} />
+          <Input label="Email" type="email" value={form.contact_email} onChange={set('contact_email')} error={errors.contact_email} />
+        </div>
+      </fieldset>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
         <Field label="Membership tier" htmlFor="business-tier">
@@ -128,7 +143,7 @@ const AdminBusinesses = () => {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => updateBusiness(id, data),
-    onSuccess: () => { refresh(); toast.success('Business updated'); setEditing(null); },
+    onSuccess: (res) => { refresh(); toast.success(res?.data?.message || 'Business updated'); setEditing(null); },
     onError: (err) => toast.error(apiMessage(err, 'Failed to update business')),
   });
 
@@ -190,6 +205,17 @@ const AdminBusinesses = () => {
                 )}
                 {b.address && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{b.address}</div>}
                 {b.phone && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{b.phone}</div>}
+                {b.registered_name && b.registered_name !== b.name && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Registered as {b.registered_name}</div>
+                )}
+                {b.contact_name && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Contact: {b.contact_name}{b.contact_position ? ` (${b.contact_position})` : ''}{b.contact_phone ? `, ${b.contact_phone}` : ''}
+                  </div>
+                )}
+                {b.membership_status === 'suspended' && (
+                  <div style={{ fontSize: '0.8rem', color: '#7B3FA0', fontWeight: 700 }}>Suspended: hidden from the app, and renewals wait until it is lifted.</div>
+                )}
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                   <button type="button" onClick={() => setEditing(b)} style={smallButton('#0E7AC4')}>
                     <MdEdit size={14} /> Edit
@@ -202,6 +228,16 @@ const AdminBusinesses = () => {
                   >
                     {b.is_active === false ? <><MdVisibility size={14} /> List</> : <><MdVisibilityOff size={14} /> Unlist</>}
                   </button>
+                  {suspensionAction(b) && (
+                    <button
+                      type="button"
+                      disabled={updateMutation.isPending}
+                      onClick={() => updateMutation.mutate({ id: b.id, data: { membership_status: suspensionAction(b).status } })}
+                      style={smallButton(b.membership_status === 'suspended' ? '#2D8C00' : '#7B3FA0')}
+                    >
+                      {b.membership_status === 'suspended' ? <MdPlayArrow size={14} /> : <MdPause size={14} />} {suspensionAction(b).label}
+                    </button>
+                  )}
                 </div>
               </div>
             );

@@ -39,6 +39,7 @@ import MembershipPage from './pages/Public/MembershipPage';
 import LegalPage from './pages/Public/LegalPage';
 import privacyPolicy from './legal/privacyPolicy';
 import termsOfService from './legal/termsOfService';
+import businessMembershipPolicy from './legal/businessMembershipPolicy';
 
 const App = () => (
   <AuthProvider>
@@ -51,6 +52,7 @@ const App = () => (
 
       {/* Public: the membership page and the store listings' legal pages. */}
       <Route path="/membership" element={<MembershipPage />} />
+      <Route path="/membership/policy" element={<LegalPage markdown={businessMembershipPolicy} />} />
       <Route path="/privacy" element={<LegalPage markdown={privacyPolicy} />} />
       <Route path="/terms" element={<LegalPage markdown={termsOfService} />} />
 

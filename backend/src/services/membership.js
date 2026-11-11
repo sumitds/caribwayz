@@ -4,7 +4,8 @@
  * public and admin controllers share it and tests run it directly.
  */
 
-const MEMBERSHIP_STATUSES = Object.freeze(['pending', 'active', 'expired', 'cancelled']);
+// suspended (migration 027): paused by an admin without being cancelled.
+const MEMBERSHIP_STATUSES = Object.freeze(['pending', 'active', 'suspended', 'expired', 'cancelled']);
 const APPLICATION_STATUSES = Object.freeze(['new', 'invoiced', 'paid', 'rejected']);
 
 const NEARBY_DEFAULT_RADIUS_M = 2000;
@@ -109,6 +110,17 @@ const adminApplication = (row) => ({
   longitude: toNumberOrNull(row.longitude),
 });
 
+/**
+ * The name a new member listing is shown under: the application's trading
+ * name when it has one that is not only spaces, otherwise its registered
+ * business name. Both are trimmed.
+ */
+const listingName = (application) => {
+  const trading = typeof application?.trading_name === 'string' ? application.trading_name.trim() : '';
+  if (trading !== '') return trading;
+  return String(application?.business_name ?? '').trim();
+};
+
 /** The radius to search, from the radius_m query value (already validated as an integer when present). */
 const clampRadius = (value) => {
   if (value === undefined || value === null || value === '') return NEARBY_DEFAULT_RADIUS_M;
@@ -162,6 +174,7 @@ module.exports = {
   publicMember,
   adminBusiness,
   adminApplication,
+  listingName,
   clampRadius,
   boundingBox,
 };

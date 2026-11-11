@@ -14,8 +14,11 @@ const ClickToPlace = ({ onPick }) => {
 /**
  * A small map: click to set the location. [latitude] and [longitude] are the
  * form's text values; the marker shows only while both are a valid position.
+ * [hint] is the line under the map.
  */
-const LocationPicker = ({ latitude, longitude, onPick, height = 220 }) => {
+const LocationPicker = ({
+  latitude, longitude, onPick, height = 220, hint = 'Click the map to place the business, or type the coordinates.',
+}) => {
   const lat = Number(latitude);
   const lng = Number(longitude);
   const placed = String(latitude).trim() !== '' && String(longitude).trim() !== '' &&
@@ -34,7 +37,7 @@ const LocationPicker = ({ latitude, longitude, onPick, height = 220 }) => {
         </MapContainer>
       </div>
       <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-        Click the map to place the business, or type the coordinates.
+        {hint}
       </p>
     </div>
   );
