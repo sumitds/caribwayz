@@ -5,7 +5,8 @@
 
 import { isWebAddress, WEB_ADDRESS_MESSAGE } from '../../utils/webAddress.js';
 
-export const MEMBERSHIP_STATUSES = ['pending', 'active', 'expired', 'cancelled'];
+// suspended (migration 027): paused by an admin without being cancelled.
+export const MEMBERSHIP_STATUSES = ['pending', 'active', 'suspended', 'expired', 'cancelled'];
 export const APPLICATION_STATUSES = ['new', 'invoiced', 'paid', 'rejected'];
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -46,6 +47,7 @@ export const EMPTY_BUSINESS_FORM = Object.freeze({
   name: '', category: '', latitude: '', longitude: '', address: '', phone: '', website: '', description: '',
   contact_email: '', employee_count: '', tier_id: '', membership_status: 'pending', membership_expires_at: '',
   promo_text: '', promo_expires_at: '', is_active: true,
+  registered_name: '', business_email: '', contact_name: '', contact_position: '', contact_phone: '',
 });
 
 /** A business row as the edit form's state (every field a string, except is_active). */
@@ -66,9 +68,22 @@ export const businessFormFrom = (b) => ({
   promo_text: b.promo_text || '',
   promo_expires_at: toDateTimeLocal(b.promo_expires_at),
   is_active: b.is_active !== false,
+  registered_name: b.registered_name || '',
+  business_email: b.business_email || '',
+  contact_name: b.contact_name || '',
+  contact_position: b.contact_position || '',
+  contact_phone: b.contact_phone || '',
 });
 
-const TEXT_FIELDS = ['category', 'address', 'phone', 'website', 'description', 'contact_email', 'promo_text'];
+const TEXT_FIELDS = [
+  'category', 'address', 'phone', 'website', 'description', 'contact_email', 'promo_text',
+  'registered_name', 'business_email', 'contact_name', 'contact_position', 'contact_phone',
+];
+
+/** The API's limits for the text fields that have one (routes/admin.js). */
+const TEXT_LIMITS = { registered_name: 200, contact_name: 200, contact_position: 100, contact_phone: 40 };
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * The request body for POST or PATCH /admin/businesses from the form, or
@@ -93,8 +108,11 @@ export const businessPayload = (form) => {
   if (form.promo_text.trim().length > 280) errors.promo_text = 'At most 280 characters';
   if (form.phone.trim().length > 40) errors.phone = 'At most 40 characters';
   if (!isWebAddress(form.website.trim())) errors.website = WEB_ADDRESS_MESSAGE;
-  if (form.contact_email.trim() !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contact_email.trim())) {
-    errors.contact_email = 'An email address';
+  for (const field of ['contact_email', 'business_email']) {
+    if (form[field].trim() !== '' && !EMAIL.test(form[field].trim())) errors[field] = 'An email address';
+  }
+  for (const [field, max] of Object.entries(TEXT_LIMITS)) {
+    if (form[field].trim().length > max) errors[field] = `At most ${max} characters`;
   }
 
   const membershipExpires = fromDateTimeLocal(form.membership_expires_at);
@@ -209,6 +227,22 @@ export const activationPayload = ({ latitude, longitude, months }) => {
   body.months = m;
   return Object.keys(errors).length > 0 ? { errors } : { body };
 };
+
+/**
+ * The quick status change offered on a business card: suspend an active or
+ * pending member, or lift a suspension back to active. Null for the other
+ * statuses, which are changed in the edit form.
+ */
+export const suspensionAction = (business) => {
+  if (business?.membership_status === 'suspended') return { label: 'Lift suspension', status: 'active' };
+  if (business?.membership_status === 'active' || business?.membership_status === 'pending') {
+    return { label: 'Suspend', status: 'suspended' };
+  }
+  return null;
+};
+
+/** Whether renewing this application must wait for its listing's suspension to be lifted. */
+export const renewalBlocked = (application) => application?.business_status === 'suspended';
 
 /** The API's message for a failed admin request, or [fallback]. */
 export const apiMessage = (error, fallback) => {

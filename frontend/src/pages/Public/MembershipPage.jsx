@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { MdStorefront, MdRecordVoiceOver, MdMap, MdCheckCircle } from 'react-icons/md';
 import PublicLayout from './PublicLayout';
+import LocationPicker from '../../components/UI/LocationPicker';
 import { getPublicMembershipTiers, applyForMembership } from '../../api/members';
 import {
   EMPTY_FORM, HONEYPOT_FIELD, FEE_TO_BE_CONFIRMED, INVOICE_BY_EMAIL, formatFee, tierRange, tierForCount, buildApplication,
@@ -31,6 +32,21 @@ const FormField = ({ id, label, required, error, hint, textarea, ...props }) => 
     </div>
   );
 };
+
+/** A titled group of fields, as the policy groups them. */
+const FieldGroup = ({ id, title, children }) => (
+  <fieldset style={{ border: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <legend id={id} style={{ fontSize: '1rem', fontWeight: 800, color: '#111', marginBottom: '0.2rem', padding: 0 }}>{title}</legend>
+    {children}
+  </fieldset>
+);
+
+const twoColumns = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' };
+
+/** Opens beside the form, so what the applicant typed is kept. */
+const NewTabLink = ({ href, children }) => (
+  <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#0E7AC4', fontWeight: 700 }}>{children}</a>
+);
 
 const Benefit = ({ icon: Icon, title, children }) => (
   <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
@@ -188,7 +204,7 @@ const MembershipPage = () => {
           <section style={card} aria-labelledby="apply-heading">
             <h2 id="apply-heading" style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '0.3rem' }}>Apply for membership</h2>
             <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Fields marked <span style={{ color: '#D12229' }}>*</span> are required. We use these details only to handle your membership.
+              Fields marked <span style={{ color: '#D12229' }}>*</span> are required. We use these details only to handle your membership, as our <NewTabLink href="/privacy">Privacy Policy</NewTabLink> explains.
             </p>
 
             {formError && (
@@ -197,28 +213,86 @@ const MembershipPage = () => {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
-                <FormField id="business_name" label="Business name" required autoComplete="organization" maxLength={200}
-                  value={form.business_name} onChange={set('business_name')} error={errors.business_name} />
-                <FormField id="category" label="Type of business" placeholder="e.g. restaurant, gas station, hotel" maxLength={100}
-                  value={form.category} onChange={set('category')} error={errors.category} />
-                <FormField id="contact_name" label="Your name" required autoComplete="name" maxLength={200}
-                  value={form.contact_name} onChange={set('contact_name')} error={errors.contact_name} />
-                <FormField id="email" label="Email" required type="email" autoComplete="email" maxLength={255}
-                  value={form.email} onChange={set('email')} error={errors.email} />
-                <FormField id="phone" label="Phone" type="tel" autoComplete="tel" maxLength={40}
-                  value={form.phone} onChange={set('phone')} error={errors.phone} />
-                <FormField id="employee_count" label="Number of employees" required inputMode="numeric" maxLength={7}
-                  value={form.employee_count} onChange={set('employee_count')} error={errors.employee_count}
-                  hint={hintTier ? `${hintTier.name} (${tierRange(hintTier)}): ${hintTier.annual_fee === null ? FEE_TO_BE_CONFIRMED : formatFee(hintTier)}` : undefined} />
-              </div>
-              <FormField id="address" label="Business address" autoComplete="street-address" maxLength={500}
-                value={form.address} onChange={set('address')} error={errors.address} />
-              <FormField id="website" label="Website" type="url" autoComplete="url" placeholder="https://" maxLength={500}
-                value={form.website} onChange={set('website')} error={errors.website} />
-              <FormField id="message" label="Anything else we should know" textarea rows={4} maxLength={2000}
-                value={form.message} onChange={set('message')} error={errors.message} />
+            <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <FieldGroup id="business-group" title="Your business">
+                <div style={twoColumns}>
+                  <FormField id="business_name" label="Registered business name" required autoComplete="organization" maxLength={200}
+                    value={form.business_name} onChange={set('business_name')} error={errors.business_name} />
+                  <FormField id="trading_name" label="Trading name, if different" maxLength={200}
+                    hint="The name drivers see in the app." value={form.trading_name} onChange={set('trading_name')} error={errors.trading_name} />
+                  <FormField id="category" label="Type of business" required placeholder="e.g. restaurant, gas station, hotel" maxLength={100}
+                    value={form.category} onChange={set('category')} error={errors.category} />
+                  <FormField id="phone" label="Business telephone" required type="tel" autoComplete="tel" maxLength={40}
+                    value={form.phone} onChange={set('phone')} error={errors.phone} />
+                  <FormField id="business_email" label="Business email" type="email" maxLength={255}
+                    value={form.business_email} onChange={set('business_email')} error={errors.business_email} />
+                  <FormField id="website" label="Website or social media page" type="url" autoComplete="url" placeholder="https://" maxLength={500}
+                    value={form.website} onChange={set('website')} error={errors.website} />
+                </div>
+                <FormField id="description" label="About the business" textarea rows={3} maxLength={1000}
+                  hint="A sentence or two for your business profile." value={form.description} onChange={set('description')} error={errors.description} />
+                <FormField id="address" label="Physical business address" required autoComplete="street-address" maxLength={500}
+                  value={form.address} onChange={set('address')} error={errors.address} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <span id="pin-label" style={{ fontSize: '0.88rem', fontWeight: 700, color: '#333' }}>Where is it on the map?</span>
+                  <LocationPicker
+                    latitude={form.latitude}
+                    longitude={form.longitude}
+                    onPick={(latitude, longitude) => setForm({ ...form, latitude: String(latitude), longitude: String(longitude) })}
+                    hint="Tap the map where your entrance is. Zoom in for accuracy. If you skip this, we place you from your address."
+                  />
+                  {form.latitude !== '' && (
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.85rem', color: '#333' }}>
+                      <span>Pin placed at {form.latitude}, {form.longitude}</span>
+                      <button type="button" onClick={() => setForm({ ...form, latitude: '', longitude: '' })}
+                        style={{ background: 'none', border: 'none', color: '#0E7AC4', fontWeight: 700, padding: '0.4rem 0', minHeight: 44, cursor: 'pointer' }}>
+                        Clear pin
+                      </button>
+                    </div>
+                  )}
+                  {errors.latitude && <span role="alert" style={{ fontSize: '0.82rem', color: 'var(--danger)' }}>{errors.latitude}</span>}
+                </div>
+              </FieldGroup>
+
+              <FieldGroup id="representative-group" title="Owner or authorized representative">
+                <div style={twoColumns}>
+                  <FormField id="contact_name" label="Full name" required autoComplete="name" maxLength={200}
+                    value={form.contact_name} onChange={set('contact_name')} error={errors.contact_name} />
+                  <FormField id="contact_position" label="Position or relationship to the business" required placeholder="e.g. Owner, Manager" maxLength={100}
+                    autoComplete="organization-title" value={form.contact_position} onChange={set('contact_position')} error={errors.contact_position} />
+                  <FormField id="contact_phone" label="Contact number" required type="tel" maxLength={40}
+                    value={form.contact_phone} onChange={set('contact_phone')} error={errors.contact_phone} />
+                  <FormField id="email" label="Email" required type="email" autoComplete="email" maxLength={255}
+                    value={form.email} onChange={set('email')} error={errors.email} />
+                </div>
+              </FieldGroup>
+
+              <FieldGroup id="membership-group" title="Membership">
+                <div style={twoColumns}>
+                  <FormField id="employee_count" label="Number of employees" required inputMode="numeric" maxLength={7}
+                    value={form.employee_count} onChange={set('employee_count')} error={errors.employee_count}
+                    hint={hintTier ? `Your tier: ${hintTier.name} (${tierRange(hintTier)}), ${hintTier.annual_fee === null ? FEE_TO_BE_CONFIRMED : formatFee(hintTier)}` : 'Your tier is chosen from this number.'} />
+                </div>
+                <FormField id="message" label="Anything else we should know" textarea rows={3} maxLength={2000}
+                  value={form.message} onChange={set('message')} error={errors.message} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label htmlFor="accept_terms" style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-start', fontSize: '0.92rem', lineHeight: 1.5, color: '#111', cursor: 'pointer' }}>
+                    <input id="accept_terms" name="accept_terms" type="checkbox" checked={form.accept_terms === true}
+                      onChange={(e) => setForm({ ...form, accept_terms: e.target.checked })}
+                      aria-invalid={errors.accept_terms ? 'true' : undefined}
+                      aria-describedby={errors.accept_terms ? 'accept_terms-error' : undefined}
+                      aria-required="true"
+                      style={{ width: 22, height: 22, marginTop: 1, flexShrink: 0, accentColor: '#D12229' }} />
+                    <span>
+                      I have read and accept the <NewTabLink href="/membership/policy">Business Membership Policy</NewTabLink> and
+                      the <NewTabLink href="/terms">Terms and Conditions</NewTabLink>, I am authorized to register this business, and
+                      the details above are accurate.<span aria-hidden="true" style={{ color: '#D12229' }}> *</span>
+                    </span>
+                  </label>
+                  {errors.accept_terms && <span id="accept_terms-error" style={{ fontSize: '0.82rem', color: 'var(--danger)' }}>{errors.accept_terms}</span>}
+                </div>
+              </FieldGroup>
+
               {/* Hidden from people and from screen readers; only a bot fills it. */}
               <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
                 <label htmlFor={HONEYPOT_FIELD}>Leave this empty</label>

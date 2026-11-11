@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 
 import privacyPolicy from '../src/legal/privacyPolicy.js';
 import termsOfService from '../src/legal/termsOfService.js';
+import businessMembershipPolicy from '../src/legal/businessMembershipPolicy.js';
 import { parseLegalDocument, parseInline, groupBullets, LEGAL_APPROVED, DRAFT_LABEL } from '../src/legal/legalDocument.js';
 
 const repoFile = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -16,6 +17,19 @@ describe('the legal text', () => {
     assert.equal(termsOfService, repoFile('docs/legal/terms-of-service.md'));
     assert.equal(privacyPolicy, repoFile('mobile/assets/legal/privacy-policy.md'));
     assert.equal(termsOfService, repoFile('mobile/assets/legal/terms-of-service.md'));
+  });
+
+  test('the Business Membership Policy is word for word the client policy file, and reads as a document', () => {
+    assert.equal(businessMembershipPolicy, repoFile('docs/legal/business-membership-policy.md'));
+    const doc = parseLegalDocument(businessMembershipPolicy);
+    assert.equal(doc.title, 'CaribWayz Business Membership Policy');
+    assert.equal(doc.version, '0.1 (draft)');
+    assert.equal(doc.lastUpdated, '9 November 2026');
+    const sections = doc.blocks.filter((b) => b.type === 'heading' && b.level === 2).map((b) => b.text);
+    assert.equal(sections.length, 13);
+    assert.equal(sections[5], '6. Registration Requirements');
+    assert.ok(doc.blocks.some((b) => b.type === 'bullet' && b.text === '**Micro Business:** 1-5 employees, US$20 a year.'));
+    assert.ok(!doc.blocks.some((b) => /^DRAFT/.test(b.text)), 'the draft notice comes from the page, not the file');
   });
 
   test('is still a draft, as in the app, and the pages say so', () => {

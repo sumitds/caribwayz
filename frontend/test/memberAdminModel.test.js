@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {
   toDateTimeLocal, fromDateTimeLocal, isShownOnMap, isPromoLive, EMPTY_BUSINESS_FORM, businessFormFrom, businessPayload,
   tierRangeShort, feeLabel, EMPTY_TIER_FORM, tierFormFrom, tierPayload, activationPayload, apiMessage,
+  MEMBERSHIP_STATUSES, suspensionAction, renewalBlocked,
 } from '../src/pages/Admin/memberAdminModel.js';
 
 const NOW = new Date('2026-10-30T12:00:00Z');
@@ -58,7 +59,29 @@ describe('the business form', () => {
       name: 'Island Grill', latitude: 18.0179, longitude: -76.8099, employee_count: 12, tier_id: 2,
       membership_status: 'pending', membership_expires_at: null, promo_expires_at: null, is_active: true,
       category: null, address: null, phone: null, website: null, description: null, contact_email: null, promo_text: '10% off',
+      registered_name: null, business_email: null, contact_name: null, contact_position: null, contact_phone: null,
     });
+  });
+
+  test('the registered name and the representative are sent trimmed, and checked', () => {
+    const { body } = businessPayload({
+      ...filled, registered_name: ' Island Grill Ltd ', business_email: ' hello@grill.test ', contact_name: ' Asha Brown ',
+      contact_position: ' Owner ', contact_phone: ' 876-555-0199 ',
+    });
+    assert.deepEqual(
+      [body.registered_name, body.business_email, body.contact_name, body.contact_position, body.contact_phone],
+      ['Island Grill Ltd', 'hello@grill.test', 'Asha Brown', 'Owner', '876-555-0199'],
+    );
+    const { errors } = businessPayload({
+      ...filled, business_email: 'nope', registered_name: 'x'.repeat(201), contact_name: 'x'.repeat(201),
+      contact_position: 'x'.repeat(101), contact_phone: '1'.repeat(41),
+    });
+    assert.deepEqual(Object.keys(errors).sort(), ['business_email', 'contact_name', 'contact_phone', 'contact_position', 'registered_name']);
+  });
+
+  test('suspended is a status the form can choose', () => {
+    assert.deepEqual(MEMBERSHIP_STATUSES, ['pending', 'active', 'suspended', 'expired', 'cancelled']);
+    assert.equal(businessPayload({ ...filled, membership_status: 'suspended' }).body.membership_status, 'suspended');
   });
 
   test('the name and a valid location are required', () => {
@@ -94,6 +117,8 @@ describe('the business form', () => {
     assert.equal(form.employee_count, '50');
     assert.equal(form.promo_text, '');
     assert.equal(form.is_active, false);
+    assert.equal(form.registered_name, '', 'a listing from before migration 027 has none');
+    assert.equal(businessFormFrom({ registered_name: 'Island Grill Ltd', contact_position: 'Owner' }).contact_position, 'Owner');
     assert.equal(fromDateTimeLocal(form.membership_expires_at), LATER);
     assert.equal(businessPayload(form).body.membership_expires_at, LATER);
   });
@@ -134,6 +159,28 @@ describe('the tier form', () => {
     assert.equal(tierRangeShort({ min_employees: 100, max_employees: null }), '100+');
     assert.equal(feeLabel(20, 'USD'), 'USD 20.00');
     assert.equal(feeLabel(null), 'Not set');
+  });
+});
+
+describe('suspending a member', () => {
+  test('an active or pending member can be suspended; a suspended one is lifted back to active', () => {
+    assert.deepEqual(suspensionAction({ membership_status: 'active' }), { label: 'Suspend', status: 'suspended' });
+    assert.deepEqual(suspensionAction({ membership_status: 'pending' }), { label: 'Suspend', status: 'suspended' });
+    assert.deepEqual(suspensionAction({ membership_status: 'suspended' }), { label: 'Lift suspension', status: 'active' });
+    for (const status of ['expired', 'cancelled', undefined]) assert.equal(suspensionAction({ membership_status: status }), null, String(status));
+    assert.equal(suspensionAction(null), null);
+  });
+
+  test('a suspended member is not on the map', () => {
+    assert.equal(isShownOnMap({ is_active: true, membership_status: 'suspended', membership_expires_at: LATER }, NOW), false);
+  });
+
+  test('renewal waits only while the linked listing is suspended', () => {
+    assert.equal(renewalBlocked({ business_id: 'b', business_status: 'suspended' }), true);
+    for (const status of ['active', 'expired', 'cancelled', null, undefined]) {
+      assert.equal(renewalBlocked({ business_id: 'b', business_status: status }), false, String(status));
+    }
+    assert.equal(renewalBlocked(null), false);
   });
 });
 

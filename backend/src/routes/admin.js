@@ -97,6 +97,11 @@ const businessRules = (required) => [
   text('business_size', 20, 'Business size'),
   text('promo_text', 280, 'Promotion'),
   email('contact_email', 'Contact email'),
+  text('registered_name', 200, 'Registered business name'),
+  email('business_email', 'Business email'),
+  text('contact_name', 200, 'Contact name'),
+  text('contact_position', 100, 'Contact position'),
+  text('contact_phone', 40, 'Contact phone'),
   body('is_active').optional().isBoolean({ strict: true }).withMessage('is_active must be true or false'),
   body('membership_status').optional().isIn(MEMBERSHIP_STATUSES)
     .withMessage(`membership_status must be one of: ${MEMBERSHIP_STATUSES.join(', ')}`),

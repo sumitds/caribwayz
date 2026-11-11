@@ -10,7 +10,7 @@ const privacyPolicy = `# CaribWayz Privacy Policy
 
 Version: 0.2 (draft)
 
-Last updated: 30 October 2026
+Last updated: 11 November 2026
 
 ## 1. Who we are
 
@@ -149,7 +149,7 @@ During a trip, the app can say the name of a CaribWayz member business you are c
 
 ### 4.14 Businesses that apply to become members
 
-When a business applies for membership on the CaribWayz website, we collect the business name, the contact person's name, email address and phone number, the business address, category, number of employees, website and location, and any message they send. We use these to deal with the application, invoice the yearly fee and, once the membership is active, list the business in the app. The business name, category, address, phone number, website, description and current offer are shown to app users; the contact person's details and the number of employees are not. The contact person can ask us to correct or delete these details at any time.
+When a business applies for membership on the CaribWayz website, we collect the business's registered name and any trading name, its category, description, address, location on the map, telephone number, email address and website or social media link; the name, position, phone number and email address of the owner or representative who applies; the number of employees; any message they send; and when they accepted the Business Membership Policy and the Terms. We use these to deal with the application, invoice the yearly fee and, once the membership is active, list the business in the app. The business's trading name (or registered name), category, address, phone number, website, description and current offer are shown to app users; the representative's details, the business email address and the number of employees are not. The representative can ask us to correct or delete these details at any time.
 
 ### 4.15 Technical information
 

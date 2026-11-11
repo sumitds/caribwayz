@@ -107,6 +107,22 @@ describe('choosing a tier from the employee count', () => {
   });
 });
 
+describe('membership statuses and listing names', () => {
+  test('suspended sits between active and expired, and is not shown on the map', () => {
+    assert.deepEqual(membership.MEMBERSHIP_STATUSES, ['pending', 'active', 'suspended', 'expired', 'cancelled']);
+    assert.match(membership.LISTED_MEMBER_SQL, /membership_status = 'active'/);
+  });
+
+  test('a listing is named by the trading name, else the registered name, trimmed', () => {
+    assert.equal(membership.listingName({ business_name: 'Island Grill Ltd', trading_name: ' Island Grill ' }), 'Island Grill');
+    for (const trading of [null, undefined, '', '   ', 42]) {
+      assert.equal(membership.listingName({ business_name: ' Island Grill Ltd ', trading_name: trading }), 'Island Grill Ltd', String(trading));
+    }
+    assert.equal(membership.listingName({ business_name: 'Café Ñandú', trading_name: 'Ñandú 🌴' }), 'Ñandú 🌴');
+    assert.equal(membership.listingName(null), '');
+  });
+});
+
 describe('promotions and member shape', () => {
   const NOW = new Date('2026-10-30T12:00:00Z');
 
@@ -242,6 +258,15 @@ describe('the hidden form field', () => {
   });
 });
 
+/** A form that passes every check of POST /members/apply. */
+const GOOD_APPLICATION = Object.freeze({
+  business_name: 'Island Grill Ltd', trading_name: 'Island Grill', category: 'restaurant',
+  description: 'Jerk chicken and fish by the sea.', address: '1 King St, Kingston', phone: '876-555-0100',
+  business_email: 'hello@grill.test', website: 'https://facebook.com/islandgrill',
+  contact_name: 'Asha Brown', contact_position: 'Owner', contact_phone: '+1 (876) 555-0199', email: 'asha@grill.test',
+  employee_count: 10, accept_terms: true,
+});
+
 describe('public member handlers', () => {
   const handlers = ({ rows = {}, fail = {}, calls = [], sendNotice, configured = true, adminEmail = 'ops@caribwayz.test' } = {}) =>
     buildMembershipHandlers({
@@ -323,9 +348,19 @@ describe('public member handlers', () => {
   });
 
   const form = (extra = {}) => ({
-    business_name: 'Island Grill', contact_name: 'Asha Brown', email: 'asha@grill.test',
-    employee_count: 120, phone: '', address: '  1 King St ', tier_id: 1, ...extra,
+    business_name: 'Island Grill Ltd', trading_name: '  Island Grill ', category: 'restaurant',
+    description: '', address: '  1 King St ', phone: '876-555-0100', business_email: '',
+    contact_name: 'Asha Brown', contact_position: 'Owner', contact_phone: '876-555-0199', email: 'asha@grill.test',
+    employee_count: 120, accept_terms: true, tier_id: 1, ...extra,
   });
+
+  /** The INSERT's values by column name, read from its column list. */
+  const insertedValues = (calls) => {
+    const insert = calls.find((c) => /INSERT INTO membership_applications/.test(c.text));
+    const columns = insert.text.match(/\(([^)]+)\)\s*VALUES/)[1].split(',').map((c) => c.trim());
+    assert.equal(columns.length, insert.params.length, 'one value per column');
+    return Object.fromEntries(columns.map((c, i) => [c, insert.params[i]]));
+  };
 
   test('apply: the server picks the tier from employee_count and quotes its fee', async () => {
     const calls = [];
@@ -339,12 +374,19 @@ describe('public member handlers', () => {
       tier: { name: '100 or more employees', annual_fee: 100, currency: 'USD', is_provisional: true },
       payment_instructions: 'Bank: NCB 123',
     });
-    const insert = calls.find((c) => /INSERT INTO membership_applications/.test(c.text));
-    assert.equal(insert.params[11], 4, 'tier 4, whatever tier_id the form sent');
-    assert.equal(insert.params[12], 100, 'quoted fee');
-    assert.equal(insert.params[3], null, 'an empty phone is stored as null');
-    assert.equal(insert.params[4], '1 King St');
-    assert.equal(insert.params[7], null, 'no location given');
+    const v = insertedValues(calls);
+    assert.equal(v.tier_id, 4, 'tier 4, whatever tier_id the form sent');
+    assert.equal(v.quoted_fee, 100, 'quoted fee');
+    assert.equal(v.description, null, 'an empty description is stored as null');
+    assert.equal(v.business_email, null, 'an empty business email is stored as null');
+    assert.equal(v.address, '1 King St');
+    assert.equal(v.trading_name, 'Island Grill');
+    assert.equal(v.latitude, null, 'no location given');
+    assert.deepEqual(
+      [v.business_name, v.category, v.phone, v.contact_name, v.contact_position, v.contact_phone, v.email],
+      ['Island Grill Ltd', 'restaurant', '876-555-0100', 'Asha Brown', 'Owner', '876-555-0199', 'asha@grill.test'],
+    );
+    assert.deepEqual(v.terms_accepted_at, new Date('2026-10-30T12:00:00Z'), 'acceptance is stamped with the server time');
   });
 
   test('apply: a tier whose fee is not set quotes null, and no instructions answer ""', async () => {
@@ -355,10 +397,10 @@ describe('public member handlers', () => {
     assert.equal(res.statusCode, 201);
     assert.deepEqual(res.body.data.tier, { name: '41-99 employees', annual_fee: null, currency: 'USD', is_provisional: true });
     assert.equal(res.body.data.payment_instructions, '');
-    const insert = calls.find((c) => /INSERT INTO membership_applications/.test(c.text));
-    assert.equal(insert.params[6], 50);
-    assert.equal(insert.params[12], null);
-    assert.deepEqual([insert.params[7], insert.params[8]], [18.01, -76.8]);
+    const v = insertedValues(calls);
+    assert.equal(v.employee_count, 50);
+    assert.equal(v.quoted_fee, null);
+    assert.deepEqual([v.latitude, v.longitude], [18.01, -76.8]);
   });
 
   test('apply: no tier fits, so tier is null and nothing is quoted', async () => {
@@ -369,8 +411,8 @@ describe('public member handlers', () => {
     assert.equal(res.statusCode, 201);
     assert.equal(res.body.data.tier, null);
     assert.equal(res.body.data.payment_instructions, '');
-    const insert = calls.find((c) => /INSERT INTO membership_applications/.test(c.text));
-    assert.deepEqual([insert.params[11], insert.params[12]], [null, null]);
+    const v = insertedValues(calls);
+    assert.deepEqual([v.tier_id, v.quoted_fee], [null, null]);
   });
 
   test('apply: emails the settings contact address, or ADMIN_EMAIL when it is empty', async () => {
@@ -384,7 +426,9 @@ describe('public member handlers', () => {
       assert.equal(sent.length, 1);
       assert.equal(sent[0].toEmail, expected);
       assert.equal(sent[0].application.id, APPLICATION_ID);
-      assert.equal(sent[0].application.business_name, 'Island Grill');
+      assert.equal(sent[0].application.business_name, 'Island Grill Ltd');
+      assert.equal(sent[0].application.trading_name, 'Island Grill');
+      assert.equal(sent[0].application.contact_position, 'Owner');
       assert.equal(sent[0].tier.annual_fee, 100);
     }
   });
@@ -463,7 +507,7 @@ describe('member routes: validation and rate limit', () => {
   });
 
   test('apply: each bad field is a 400 naming it, then the sixth request in an hour is 429', async () => {
-    const good = { business_name: 'Island Grill', contact_name: 'Asha', email: 'asha@grill.test', employee_count: 10 };
+    const good = GOOD_APPLICATION;
     const cases = [
       [{ ...good, business_name: 'A' }, 'business_name'],
       [{ ...good, email: 'not-an-email', contact_name: '   ' }, 'email'],
@@ -494,7 +538,7 @@ describe('member routes: validation and rate limit', () => {
       for (const website of ['javascript:alert(1)', 'intent://scan/#Intent;end']) {
         const res = await fetch(`${b}/members/apply`, {
           method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ business_name: 'Island Grill', contact_name: 'Asha', email: 'a@grill.test', employee_count: 3, website }),
+          body: JSON.stringify({ ...GOOD_APPLICATION, website }),
         });
         assert.equal(res.status, 400, website);
         assert.deepEqual((await res.json()).errors.map((e) => e.path), ['website']);
@@ -564,6 +608,44 @@ describe('member routes: validation and rate limit', () => {
     } finally {
       await close(s);
     }
+  });
+
+  test('apply: the required details of the policy, their limits, and acceptance as JSON true', async () => {
+    // Each request on a fresh router, so the five-an-hour limit never answers first.
+    const send = async (body) => {
+      const app = express();
+      app.use(express.json());
+      app.use('/members', freshMembersRouter());
+      const { server: s, base: b } = await listen(app);
+      try {
+        const res = await fetch(`${b}/members/apply`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+        });
+        assert.equal(res.status, 400, JSON.stringify(body));
+        return (await res.json()).errors.map((e) => e.path).sort();
+      } finally {
+        await close(s);
+      }
+    };
+
+    const required = ['accept_terms', 'address', 'category', 'contact_phone', 'contact_position', 'phone'];
+    const missing = { ...GOOD_APPLICATION };
+    for (const field of required) delete missing[field];
+    assert.deepEqual(await send(missing), required);
+
+    const blank = { ...GOOD_APPLICATION, category: '  ', address: '', phone: ' ', contact_position: '	', contact_phone: '' };
+    assert.deepEqual(await send(blank), ['address', 'category', 'contact_phone', 'contact_position', 'phone']);
+
+    // Acceptance must be the JSON value true, not a truthy look-alike.
+    for (const accept of [false, 'true', 1, 'on', null]) {
+      assert.deepEqual(await send({ ...GOOD_APPLICATION, accept_terms: accept }), ['accept_terms'], String(accept));
+    }
+
+    assert.deepEqual(await send({
+      ...GOOD_APPLICATION,
+      trading_name: 'x'.repeat(201), description: 'x'.repeat(1001), business_email: 'not-an-email',
+      contact_position: 'x'.repeat(101), contact_phone: 'ring me',
+    }), ['business_email', 'contact_phone', 'contact_position', 'description', 'trading_name']);
   });
 });
 
@@ -737,7 +819,7 @@ describe('admin member handlers', () => {
   });
 
   /** A transaction client that answers by statement and records them. */
-  const fakeClient = ({ application, linked = null, failOn } = {}) => {
+  const fakeClient = ({ application, linked = null, linkedStatus = 'active', failOn } = {}) => {
     const statements = [];
     let released = 0;
     const client = {
@@ -748,7 +830,9 @@ describe('admin member handlers', () => {
         statements.push({ text, params });
         if (failOn && failOn.test(text)) throw new Error('db down');
         if (/FROM membership_applications WHERE id/.test(text)) return { rows: application ? [application] : [] };
-        if (/SELECT id FROM businesses/.test(text)) return { rows: linked ? [{ id: linked }] : [] };
+        if (/SELECT id, membership_status FROM businesses/.test(text)) {
+          return { rows: linked ? [{ id: linked, membership_status: linkedStatus }] : [] };
+        }
         if (/INSERT INTO businesses/.test(text)) return { rows: [{ id: BUSINESS_ID }] };
         if (/UPDATE businesses/.test(text)) return { rows: [{ id: linked }] };
         return { rows: [] };
@@ -759,7 +843,8 @@ describe('admin member handlers', () => {
 
   const APPLICATION = {
     id: APPLICATION_ID, business_name: 'Island Grill', category: 'restaurant', address: '1 King St', phone: null,
-    website: null, tier_id: 4, employee_count: 120, email: 'asha@grill.test', latitude: null, longitude: null, business_id: null,
+    website: null, tier_id: 4, employee_count: 120, contact_name: 'Asha Brown', email: 'asha@grill.test',
+    latitude: null, longitude: null, business_id: null,
   };
 
   const activator = (client) => buildMemberAdminHandlers({
@@ -779,7 +864,10 @@ describe('admin member handlers', () => {
     assert.equal(texts[texts.length - 1], 'COMMIT');
     const insert = client.statements.find((s) => /INSERT INTO businesses/.test(s.text));
     assert.match(insert.text, /'active', NOW\(\) \+ make_interval\(months => \$11\)/);
-    assert.deepEqual(insert.params, ['Island Grill', 'restaurant', 18, -76, '1 King St', null, null, 4, 120, 'asha@grill.test', 12, ADMIN_ID]);
+    assert.deepEqual(insert.params, [
+      'Island Grill', 'restaurant', 18, -76, '1 King St', null, null, 4, 120, 'asha@grill.test', 12, ADMIN_ID,
+      'Island Grill', null, null, 'Asha Brown', null, null,
+    ], 'an application from before migration 027 has no new details: they are null, and the name is the registered one');
     const paid = client.statements.find((s) => /UPDATE membership_applications SET status = 'paid'/.test(s.text));
     assert.deepEqual(paid.params, [BUSINESS_ID, APPLICATION_ID]);
     assert.equal(client.released, 1);
@@ -796,6 +884,47 @@ describe('admin member handlers', () => {
     assert.ok(!client.statements.some((s) => /INSERT INTO businesses/.test(s.text)));
     const update = client.statements.find((s) => /UPDATE businesses SET/.test(s.text));
     assert.deepEqual(update.params, [6, null, null, 4, LINKED]);
+  });
+
+  test('activate: the listing shows the trading name and keeps the registered name and the policy details', async () => {
+    const client = fakeClient({
+      application: {
+        ...APPLICATION, business_name: 'Island Grill Ltd', trading_name: '  Island Grill  ', description: 'Jerk by the sea',
+        business_email: 'hello@grill.test', contact_position: 'Owner', contact_phone: '876-555-0199', phone: '876-555-0100',
+      },
+    });
+    const res = makeRes();
+    await activator(client)({ params: { id: APPLICATION_ID }, user: { id: ADMIN_ID }, body: { latitude: 18, longitude: -76 } }, res);
+    assert.equal(res.statusCode, 200);
+    const insert = client.statements.find((s) => /INSERT INTO businesses/.test(s.text));
+    const columns = insert.text.match(/\(([^)]+)\)\s*VALUES/)[1].split(',').map((c) => c.trim());
+    assert.deepEqual(columns.slice(-6), ['registered_name', 'description', 'business_email', 'contact_name', 'contact_position', 'contact_phone']);
+    assert.equal(insert.params[0], 'Island Grill', 'name: the trading name, trimmed');
+    assert.equal(insert.params[5], '876-555-0100', 'phone: the business telephone');
+    assert.deepEqual(insert.params.slice(-6), ['Island Grill Ltd', 'Jerk by the sea', 'hello@grill.test', 'Asha Brown', 'Owner', '876-555-0199']);
+  });
+
+  test('activate: renewing a suspended business is refused (409), rolled back, nothing written', async () => {
+    const LINKED = '88888888-7777-4666-8555-444444444444';
+    const client = fakeClient({ application: { ...APPLICATION, business_id: LINKED }, linked: LINKED, linkedStatus: 'suspended' });
+    const res = makeRes();
+    await activator(client)({ params: { id: APPLICATION_ID }, user: { id: ADMIN_ID }, body: { months: 12 } }, res);
+    assert.equal(res.statusCode, 409);
+    assert.match(res.body.message, /suspended\. Lift the suspension/);
+    assert.ok(!client.statements.some((s) => /^\s*(INSERT|UPDATE)/.test(s.text)), 'nothing written');
+    assert.equal(client.statements[client.statements.length - 1].text, 'ROLLBACK');
+    assert.equal(client.released, 1);
+  });
+
+  test('activate: renewing a cancelled or expired business still works', async () => {
+    const LINKED = '88888888-7777-4666-8555-444444444444';
+    for (const status of ['cancelled', 'expired', 'pending']) {
+      const client = fakeClient({ application: { ...APPLICATION, business_id: LINKED }, linked: LINKED, linkedStatus: status });
+      const res = makeRes();
+      await activator(client)({ params: { id: APPLICATION_ID }, user: { id: ADMIN_ID }, body: {} }, res);
+      assert.equal(res.statusCode, 200, status);
+      assert.equal(res.body.message, 'Membership renewed', status);
+    }
   });
 
   test('activate: uses the location on the application when none is given', async () => {
@@ -902,6 +1031,29 @@ describe('the application notice email', () => {
     assert.doesNotMatch(sent[0].text, /Phone:/, 'empty fields are left out');
   });
 
+  test('lists the registration details of the policy, escaped, with the empty ones left out', async (t) => {
+    const sent = [];
+    const { sendMembershipApplicationNotice } = loadMailer(t, async (mail) => { sent.push(mail); });
+    await sendMembershipApplicationNotice({
+      toEmail: 'team@caribwayz.test',
+      application: {
+        ...application, business_name: 'Island Grill Ltd', trading_name: 'Island <Grill>', description: null,
+        phone: '876-555-0100', business_email: 'hello@grill.test', contact_position: 'Owner', contact_phone: '876-555-0199',
+      },
+      tier: null,
+    });
+    const { text, html } = sent[0];
+    for (const line of [
+      'Registered name: Island Grill Ltd', 'Trading name: Island <Grill>', 'Business phone: 876-555-0100',
+      'Business email: hello@grill.test', 'Contact: Asha', 'Position: Owner', 'Contact phone: 876-555-0199',
+      'Contact email: asha@grill.test',
+    ]) {
+      assert.ok(text.includes(line), line);
+    }
+    assert.doesNotMatch(text, /Description:/);
+    assert.match(html, /Island &lt;Grill&gt;/);
+  });
+
   test('says when the fee is not set or no tier fits', async (t) => {
     const sent = [];
     const { sendMembershipApplicationNotice } = loadMailer(t, async (mail) => { sent.push(mail); });
@@ -955,6 +1107,13 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
     const res = await fetch(base + url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     return { status: res.status, body: await res.json() };
   };
+
+  // The details the policy requires on every application (migration 027).
+  // No trading name, so the listing keeps the business name the test gives.
+  const POLICY = Object.freeze({
+    category: 'hotel', address: '1 Test Road, Kingston', phone: '876-555-0100',
+    contact_position: 'Owner', contact_phone: '876-555-0199', accept_terms: true,
+  });
 
   const addMember = (name, metres, extra = {}) => q(
     `INSERT INTO businesses (name, category, latitude, longitude, membership_status, membership_expires_at, is_active, promo_text, promo_expires_at)
@@ -1150,7 +1309,7 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
     assert.equal(res.body.data.settings.contact_email, null);
 
     res = await call(null, 'POST', '/members/apply', {
-      business_name: `Applied ${stamp}`, contact_name: 'Asha Brown', email: `asha-${stamp}@members.test`,
+      ...POLICY, business_name: `Applied ${stamp}`, contact_name: 'Asha Brown', email: `asha-${stamp}@members.test`,
       employee_count: 250, category: 'hotel', latitude: north(500), longitude: HERE.lng,
     });
     assert.equal(res.status, 201, JSON.stringify(res.body));
@@ -1210,7 +1369,7 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
     await q(`INSERT INTO membership_tiers (name, min_employees, max_employees, annual_fee, sort_order)
              VALUES ($1, 700000, 700010, NULL, 0)`, [`No fee tier ${stamp}`]);
     let res = await call(null, 'POST', '/members/apply', {
-      business_name: `No fee ${stamp}`, contact_name: 'Ben', email: `ben-${stamp}@members.test`, employee_count: 700005,
+      ...POLICY, business_name: `No fee ${stamp}`, contact_name: 'Ben', email: `ben-${stamp}@members.test`, employee_count: 700005,
     });
     assert.equal(res.status, 201);
     assert.equal(res.body.data.tier.annual_fee, null);
@@ -1284,7 +1443,7 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
 
   test('activate copies a 40-character phone; a rejected application is refused until reopened', async () => {
     let res = await call(null, 'POST', '/members/apply', {
-      business_name: `Long phone ${stamp}`, contact_name: 'Cy', email: `cy-${stamp}@members.test`, employee_count: 3,
+      ...POLICY, business_name: `Long phone ${stamp}`, contact_name: 'Cy', email: `cy-${stamp}@members.test`, employee_count: 3,
       // 40 characters: the most the form takes, more than businesses.phone held.
       phone: '+1 876 555 0100 0101 0102 0103 0104 0105', latitude: north(700), longitude: HERE.lng,
     });
@@ -1304,6 +1463,90 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
     res = await call('boss', 'POST', `/admin/membership-applications/${id}/activate`, {});
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.equal(res.body.data.business.phone, stored);
+  });
+
+  test('migration 027: the policy details are stored, copied to the listing, and a suspension hides it until lifted', async () => {
+    const columns = async (table) => (await q(
+      'SELECT column_name FROM information_schema.columns WHERE table_name = $1', [table])).rows.map((r) => r.column_name);
+    const appColumns = await columns('membership_applications');
+    for (const c of ['trading_name', 'description', 'business_email', 'contact_position', 'contact_phone', 'terms_accepted_at']) {
+      assert.ok(appColumns.includes(c), c);
+    }
+    const businessColumns = await columns('businesses');
+    for (const c of ['registered_name', 'business_email', 'contact_name', 'contact_position', 'contact_phone']) {
+      assert.ok(businessColumns.includes(c), c);
+    }
+    // migrate ran twice in before(): the check was replaced once and allows suspended.
+    const checks = (await q(`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+                              WHERE conrelid = 'businesses'::regclass AND conname = 'businesses_membership_status_check'`)).rows;
+    assert.equal(checks.length, 1);
+    assert.match(checks[0].def, /suspended/);
+
+    const sentAt = Date.now();
+    let res = await call(null, 'POST', '/members/apply', {
+      ...POLICY, business_name: 'Island Grill Ltd', trading_name: `Island Grill ${stamp}`, description: 'Jerk by the sea',
+      business_email: `hello-${stamp}@members.test`, website: 'https://facebook.com/islandgrill',
+      contact_name: 'Dee', email: `dee-${stamp}@members.test`, employee_count: 4, latitude: north(300), longitude: HERE.lng,
+    });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(res.body.data.tier.name, 'Micro');
+    const id = res.body.data.application_id;
+    const stored = (await q('SELECT * FROM membership_applications WHERE id = $1', [id])).rows[0];
+    assert.equal(stored.trading_name, `Island Grill ${stamp}`);
+    assert.equal(stored.contact_position, 'Owner');
+    assert.equal(stored.contact_phone, '876-555-0199');
+    assert.ok(stored.terms_accepted_at instanceof Date);
+    assert.ok(Math.abs(stored.terms_accepted_at - sentAt) < 60000, 'accepted when sent');
+
+    res = await call('boss', 'GET', '/admin/membership-applications');
+    assert.equal(res.body.data.applications.find((a) => a.id === id).business_status, null, 'no listing yet');
+
+    res = await call('boss', 'POST', `/admin/membership-applications/${id}/activate`, {});
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const b = res.body.data.business;
+    assert.equal(b.name, `Island Grill ${stamp}`, 'shown under the trading name');
+    assert.equal(b.registered_name, 'Island Grill Ltd');
+    assert.deepEqual(
+      [b.description, b.business_email, b.contact_name, b.contact_position, b.contact_phone, b.phone],
+      ['Jerk by the sea', `hello-${stamp}@members.test`, 'Dee', 'Owner', '876-555-0199', '876-555-0100'],
+    );
+    assert.equal(res.body.data.application.business_status, 'active');
+
+    const shown = async () => (await call(null, 'GET', `/members/nearby?lat=${HERE.lat}&lng=${HERE.lng}`))
+      .body.data.members.find((m) => m.id === b.id);
+    const member = await shown();
+    assert.ok(member, 'active: shown');
+    for (const hidden of ['registered_name', 'business_email', 'contact_name', 'contact_position', 'contact_phone']) {
+      assert.ok(!(hidden in member), `${hidden} is not sent to the app`);
+    }
+
+    res = await call('boss', 'PATCH', `/admin/businesses/${b.id}`, { membership_status: 'suspended' });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.data.business.membership_expires_at, b.membership_expires_at, 'the expiry is left alone');
+    assert.equal(await shown(), undefined, 'suspended: not shown');
+    res = await call('boss', 'GET', '/admin/businesses?membership_status=suspended');
+    assert.ok(res.body.data.businesses.some((x) => x.id === b.id));
+
+    res = await call('boss', 'POST', `/admin/membership-applications/${id}/activate`, { months: 12 });
+    assert.equal(res.status, 409);
+    assert.match(res.body.message, /suspended/);
+    const still = (await q('SELECT membership_status, membership_expires_at FROM businesses WHERE id = $1', [b.id])).rows[0];
+    assert.equal(still.membership_status, 'suspended');
+    assert.equal(still.membership_expires_at.toISOString(), new Date(b.membership_expires_at).toISOString(), 'no time added');
+
+    res = await call('boss', 'PATCH', `/admin/businesses/${b.id}`, { membership_status: 'active' });
+    assert.equal(res.status, 200);
+    assert.ok(await shown(), 'suspension lifted: shown again');
+    res = await call('boss', 'POST', `/admin/membership-applications/${id}/activate`, { months: 1 });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.message, 'Membership renewed');
+
+    res = await call('boss', 'PATCH', `/admin/businesses/${b.id}`, { business_email: 'not-an-email' });
+    assert.equal(res.status, 422);
+    res = await call('boss', 'PATCH', `/admin/businesses/${b.id}`, { contact_position: '', registered_name: 'Island Grill Limited' });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.business.contact_position, null, 'empty clears it');
+    assert.equal(res.body.data.business.registered_name, 'Island Grill Limited');
   });
 
   test('nearby finds members across the antimeridian and next to the pole', async () => {
@@ -1329,7 +1572,7 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
 
   test('a website that is not http or https is refused on apply and on admin edits; a filled hidden field stores nothing', async () => {
     let res = await call(null, 'POST', '/members/apply', {
-      business_name: `Bot ${stamp}`, contact_name: 'Bot', email: `bot-${stamp}@members.test`, employee_count: 3, cw_hp: 'gotcha',
+      ...POLICY, business_name: `Bot ${stamp}`, contact_name: 'Bot', email: `bot-${stamp}@members.test`, employee_count: 3, cw_hp: 'gotcha',
     });
     assert.equal(res.status, 201);
     assert.equal((await q('SELECT COUNT(*)::int AS n FROM membership_applications WHERE email = $1', [`bot-${stamp}@members.test`])).rows[0].n, 0);

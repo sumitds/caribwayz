@@ -44,12 +44,27 @@ export const tierForCount = (tiers, count) => {
   return tiers.find((t) => n >= t.min_employees && (t.max_employees === null || t.max_employees === undefined || n <= t.max_employees)) || null;
 };
 
+/**
+ * The form's fields, in the order of the Business Membership Policy,
+ * section 6. business_name is the registered name; phone is the business
+ * telephone; contact_name, contact_position, contact_phone and email are the
+ * owner or authorized representative. latitude and longitude are the map
+ * pin, text until sent. accept_terms is the tick box, a boolean.
+ */
 export const EMPTY_FORM = Object.freeze({
-  business_name: '', contact_name: '', email: '', phone: '', address: '', category: '',
-  employee_count: '', website: '', message: '', [HONEYPOT_FIELD]: '',
+  business_name: '', trading_name: '', category: '', description: '', address: '', latitude: '', longitude: '',
+  phone: '', business_email: '', website: '',
+  contact_name: '', contact_position: '', contact_phone: '', email: '',
+  employee_count: '', message: '', accept_terms: false, [HONEYPOT_FIELD]: '',
 });
 
-const LIMITS = { business_name: 200, contact_name: 200, email: 255, phone: 40, address: 500, category: 100, website: 500, message: 2000 };
+const LIMITS = {
+  business_name: 200, trading_name: 200, category: 100, description: 1000, address: 500, phone: 40,
+  business_email: 255, website: 500, contact_name: 200, contact_position: 100, contact_phone: 40, email: 255, message: 2000,
+};
+
+/** Optional text sent only when filled in. */
+const OPTIONAL_TEXT = ['trading_name', 'description', 'business_email', 'website', 'message'];
 
 /**
  * Checks the form the way the API will, so most mistakes show at once next
@@ -59,12 +74,24 @@ const LIMITS = { business_name: 200, contact_name: 200, email: 255, phone: 40, a
 export const buildApplication = (form) => {
   const value = (field) => (typeof form[field] === 'string' ? form[field].trim() : '');
   const errors = {};
+  const required = (field, message) => { if (value(field) === '') errors[field] = message; };
 
-  const name = value('business_name');
-  if (name.length < 2) errors.business_name = 'Enter the business name.';
-  if (value('contact_name') === '') errors.contact_name = 'Enter the name of the person we should contact.';
-  const email = value('email');
-  if (!EMAIL_PATTERN.test(email)) errors.email = 'Enter an email address, such as name@business.com.';
+  if (value('business_name').length < 2) errors.business_name = 'Enter the registered business name.';
+  required('category', 'Enter the type of business, such as restaurant or gas station.');
+  required('address', 'Enter the physical address of the business.');
+  required('phone', 'Enter the business telephone number.');
+  required('contact_name', 'Enter the full name of the owner or authorized representative.');
+  required('contact_position', 'Enter their position or relationship to the business, such as Owner or Manager.');
+  required('contact_phone', 'Enter a contact number for the owner or representative.');
+  if (!EMAIL_PATTERN.test(value('email'))) errors.email = 'Enter an email address, such as name@business.com.';
+
+  for (const field of ['phone', 'contact_phone']) {
+    if (!errors[field] && !PHONE_PATTERN.test(value(field))) errors[field] = 'Enter a phone number using digits, spaces, +, - or brackets.';
+  }
+  if (value('business_email') !== '' && !EMAIL_PATTERN.test(value('business_email'))) {
+    errors.business_email = 'Enter an email address, such as info@business.com, or leave it empty.';
+  }
+  if (!isWebAddress(value('website'))) errors.website = WEB_ADDRESS_MESSAGE;
 
   const countText = value('employee_count');
   const count = Number(countText);
@@ -72,9 +99,23 @@ export const buildApplication = (form) => {
     errors.employee_count = 'Enter the number of employees as a whole number, 1 or more.';
   }
 
-  const phone = value('phone');
-  if (phone !== '' && !PHONE_PATTERN.test(phone)) errors.phone = 'Enter a phone number using digits, spaces, +, - or brackets.';
-  if (!isWebAddress(value('website'))) errors.website = WEB_ADDRESS_MESSAGE;
+  // The map pin: both or neither, set by tapping the map or typed.
+  const latText = value('latitude');
+  const lngText = value('longitude');
+  let location = null;
+  if (latText !== '' || lngText !== '') {
+    const lat = Number(latText);
+    const lng = Number(lngText);
+    if (latText === '' || lngText === '' || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      errors.latitude = 'Tap the map where the business is, or clear the pin.';
+    } else {
+      location = { latitude: lat, longitude: lng };
+    }
+  }
+
+  if (form.accept_terms !== true) {
+    errors.accept_terms = 'Tick the box to accept the Business Membership Policy and the Terms and Conditions.';
+  }
 
   for (const [field, max] of Object.entries(LIMITS)) {
     if (!errors[field] && value(field).length > max) errors[field] = `Use at most ${max} characters.`;
@@ -82,10 +123,22 @@ export const buildApplication = (form) => {
 
   if (Object.keys(errors).length > 0) return { errors };
 
-  const body = { business_name: name, contact_name: value('contact_name'), email, employee_count: count };
+  const body = {
+    business_name: value('business_name'),
+    category: value('category'),
+    address: value('address'),
+    phone: value('phone'),
+    contact_name: value('contact_name'),
+    contact_position: value('contact_position'),
+    contact_phone: value('contact_phone'),
+    email: value('email'),
+    employee_count: count,
+    accept_terms: true,
+  };
+  if (location) Object.assign(body, location);
   // Whatever is in the hidden field goes as typed; the API drops the form when it is filled.
   if (typeof form[HONEYPOT_FIELD] === 'string' && form[HONEYPOT_FIELD] !== '') body[HONEYPOT_FIELD] = form[HONEYPOT_FIELD];
-  for (const field of ['phone', 'address', 'category', 'website', 'message']) {
+  for (const field of OPTIONAL_TEXT) {
     if (value(field) !== '') body[field] = value(field);
   }
   return { body };

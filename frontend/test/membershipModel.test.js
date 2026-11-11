@@ -43,38 +43,83 @@ describe('tiers on the page', () => {
   });
 });
 
-describe('buildApplication', () => {
-  const filled = { ...EMPTY_FORM, business_name: ' Island Grill ', contact_name: 'Asha', email: 'asha@grill.test', employee_count: '12' };
+/** A form filled the way the policy asks, with spaces a person might leave. */
+const FILLED = Object.freeze({
+  ...EMPTY_FORM,
+  business_name: ' Island Grill Ltd ', category: 'restaurant', address: ' 1 King St, Kingston ', phone: '876-555-0100',
+  contact_name: 'Asha Brown', contact_position: ' Owner ', contact_phone: '+1 (876) 555-0199', email: 'asha@grill.test',
+  employee_count: '12', accept_terms: true,
+});
 
-  test('sends trimmed required fields and only the optional ones filled in', () => {
-    assert.deepEqual(buildApplication({ ...filled, phone: '+1 876 555 0100', message: '  ' }), {
-      body: { business_name: 'Island Grill', contact_name: 'Asha', email: 'asha@grill.test', employee_count: 12, phone: '+1 876 555 0100' },
+describe('buildApplication', () => {
+  test('sends trimmed required fields, acceptance as true, and only the optional ones filled in', () => {
+    assert.deepEqual(buildApplication({ ...FILLED, trading_name: ' Island Grill ', message: '  ', description: '' }), {
+      body: {
+        business_name: 'Island Grill Ltd', trading_name: 'Island Grill', category: 'restaurant', address: '1 King St, Kingston',
+        phone: '876-555-0100', contact_name: 'Asha Brown', contact_position: 'Owner', contact_phone: '+1 (876) 555-0199',
+        email: 'asha@grill.test', employee_count: 12, accept_terms: true,
+      },
     });
   });
 
-  test('every required field is checked, with a message for each', () => {
+  test('every required field of the policy is checked, with a message for each', () => {
     const { errors } = buildApplication({ ...EMPTY_FORM });
-    assert.deepEqual(Object.keys(errors).sort(), ['business_name', 'contact_name', 'email', 'employee_count']);
+    assert.deepEqual(Object.keys(errors).sort(), [
+      'accept_terms', 'address', 'business_name', 'category', 'contact_name', 'contact_phone', 'contact_position',
+      'email', 'employee_count', 'phone',
+    ]);
+    for (const message of Object.values(errors)) assert.ok(message.endsWith('.'), message);
+  });
+
+  test('only spaces count as empty', () => {
+    const { errors } = buildApplication({ ...FILLED, category: '   ', address: ' ', contact_position: '\t' });
+    assert.deepEqual(Object.keys(errors).sort(), ['address', 'category', 'contact_position']);
+  });
+
+  test('acceptance must be the tick box, not a truthy look-alike', () => {
+    for (const accept of [false, 'true', 'on', 1, undefined]) {
+      assert.ok(buildApplication({ ...FILLED, accept_terms: accept }).errors.accept_terms, String(accept));
+    }
   });
 
   test('employee count must be a whole number from 1 to 1000000', () => {
     for (const bad of ['0', '-1', '2.5', '1e3', 'twelve', '1000001', ' ']) {
-      assert.ok(buildApplication({ ...filled, employee_count: bad }).errors.employee_count, bad);
+      assert.ok(buildApplication({ ...FILLED, employee_count: bad }).errors.employee_count, bad);
     }
-    assert.equal(buildApplication({ ...filled, employee_count: '1000000' }).body.employee_count, 1000000);
+    assert.equal(buildApplication({ ...FILLED, employee_count: '1000000' }).body.employee_count, 1000000);
   });
 
   test('a bad email, phone, or text over its limit is refused', () => {
-    assert.ok(buildApplication({ ...filled, email: 'asha@' }).errors.email);
-    assert.ok(buildApplication({ ...filled, phone: 'call me' }).errors.phone);
-    assert.ok(buildApplication({ ...filled, message: 'x'.repeat(2001) }).errors.message);
-    assert.ok(buildApplication({ ...filled, business_name: 'A' }).errors.business_name);
-    assert.equal(buildApplication({ ...filled, message: 'x'.repeat(2000) }).body.message.length, 2000);
+    assert.ok(buildApplication({ ...FILLED, email: 'asha@' }).errors.email);
+    assert.ok(buildApplication({ ...FILLED, phone: 'call me' }).errors.phone);
+    assert.ok(buildApplication({ ...FILLED, contact_phone: 'ring' }).errors.contact_phone);
+    assert.ok(buildApplication({ ...FILLED, business_email: 'info@' }).errors.business_email);
+    assert.ok(buildApplication({ ...FILLED, message: 'x'.repeat(2001) }).errors.message);
+    assert.ok(buildApplication({ ...FILLED, description: 'x'.repeat(1001) }).errors.description);
+    assert.ok(buildApplication({ ...FILLED, trading_name: 'x'.repeat(201) }).errors.trading_name);
+    assert.ok(buildApplication({ ...FILLED, contact_position: 'x'.repeat(101) }).errors.contact_position);
+    assert.ok(buildApplication({ ...FILLED, business_name: 'A' }).errors.business_name);
+    assert.equal(buildApplication({ ...FILLED, message: 'x'.repeat(2000) }).body.message.length, 2000);
+    assert.equal(buildApplication({ ...FILLED, business_email: ' info@grill.test ' }).body.business_email, 'info@grill.test');
+  });
+
+  test('names in any script are kept as typed', () => {
+    const { body } = buildApplication({ ...FILLED, business_name: 'Café Ñandú', trading_name: 'Ñandú 🌴', contact_name: 'Zoë Ó Briain' });
+    assert.deepEqual([body.business_name, body.trading_name, body.contact_name], ['Café Ñandú', 'Ñandú 🌴', 'Zoë Ó Briain']);
+  });
+
+  test('the map pin is sent as numbers, both or neither', () => {
+    assert.equal('latitude' in buildApplication(FILLED).body, false, 'no pin: no location');
+    const { body } = buildApplication({ ...FILLED, latitude: '18.0179', longitude: '-76.8099' });
+    assert.deepEqual([body.latitude, body.longitude], [18.0179, -76.8099]);
+    for (const [lat, lng] of [['18', ''], ['', '-76'], ['91', '-76'], ['18', '181'], ['x', '-76']]) {
+      assert.ok(buildApplication({ ...FILLED, latitude: lat, longitude: lng }).errors.latitude, `${lat},${lng}`);
+    }
   });
 });
 
 describe('website and the hidden field', () => {
-  const filled = { ...EMPTY_FORM, business_name: 'Island Grill', contact_name: 'Asha', email: 'asha@grill.test', employee_count: '12' };
+  const filled = FILLED;
 
   test('a website must be http or https; a bare www address is fine', () => {
     for (const bad of ['javascript:alert(1)', 'intent://scan/#Intent;end', 'mailto:a@b.com', 'grill']) {
