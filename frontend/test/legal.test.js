@@ -40,8 +40,8 @@ describe('the legal text', () => {
 
   test('both documents read with a title, version, date and sections', () => {
     for (const [text, title, version] of [
-      [privacyPolicy, 'CaribWayz Privacy Policy', '0.3 (draft)'],
-      [termsOfService, 'CaribWayz Terms of Service', '0.2 (draft)'],
+      [privacyPolicy, 'CaribWayz Privacy Policy', '0.4 (draft)'],
+      [termsOfService, 'CaribWayz Terms of Service', '0.3 (draft)'],
     ]) {
       const doc = parseLegalDocument(text);
       assert.equal(doc.title, title);

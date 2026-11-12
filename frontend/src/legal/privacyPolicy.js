@@ -8,17 +8,17 @@ const privacyPolicy = `# CaribWayz Privacy Policy
 
 > DRAFT - pending legal review. This text has not yet been approved by a lawyer and may change before it takes effect.
 
-Version: 0.3 (draft)
+Version: 0.4 (draft)
 
 Last updated: 12 November 2026
 
 ## 1. Who we are
 
-CaribWayz is a navigation and road-safety app for Jamaica and the wider Caribbean. In this policy, "CaribWayz", "we", "us" and "our" mean CARIBWAYZ, a company registered in Jamaica under number [Company registration number], with its registered address at 18 Phoenix, Greater Portmore, Jamaica.
+CaribWayz is a navigation and road-safety app for Jamaica and the wider Caribbean. In this policy, "CaribWayz", "we", "us" and "our" mean CARIBWAYZ, a company registered in Jamaica under number 1626/2025, with its registered address at 18 Phoenix, Greater Portmore, Jamaica.
 
 We decide how and why your personal information is used, so we are the "data controller" for it under Jamaica's Data Protection Act, 2020 and similar laws elsewhere in the Caribbean.
 
-You can contact us about anything in this policy at merakijt27@gmail.com. Our Data Protection Officer is [Data Protection Officer name], who you can reach at [Data Protection Officer email].
+You can contact us about anything in this policy at info@caribwayz.com. Our Data Protection Officer is [Data Protection Officer name], who you can reach at [Data Protection Officer email].
 
 ## 2. What this policy covers
 
@@ -246,7 +246,7 @@ Under Jamaica's Data Protection Act, 2020, and similar laws in other Caribbean c
 - Ask us not to use your information for direct marketing.
 - Complain to the regulator. In Jamaica this is the Office of the Information Commissioner. In other countries, contact your local data protection authority.
 
-To use any of these rights, contact us at merakijt27@gmail.com. We may need to confirm who you are first. We will answer within 30 days.
+To use any of these rights, contact us at info@caribwayz.com. We may need to confirm who you are first. We will answer within 30 days.
 
 ## 10. Deleting your account
 
@@ -256,7 +256,7 @@ When you delete your account, we delete from our servers your profile and profil
 
 Deletion cannot be undone. Messages other people have already received, such as a text you sent your emergency contact or a group notification, cannot be recalled.
 
-If you cannot use the app, email merakijt27@gmail.com from the email address on your account, or tell us the phone number you sign in with, and we will delete your account for you.
+If you cannot use the app, email info@caribwayz.com from the email address on your account, or tell us the phone number you sign in with, and we will delete your account for you.
 
 Administrator accounts cannot be deleted from the app. They are removed by another administrator.
 
@@ -285,7 +285,7 @@ CARIBWAYZ
 
 18 Phoenix, Greater Portmore, Jamaica
 
-Email: merakijt27@gmail.com
+Email: info@caribwayz.com
 
 Data Protection Officer: [Data Protection Officer name], [Data Protection Officer email]
 `;
