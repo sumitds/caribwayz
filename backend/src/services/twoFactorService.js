@@ -211,13 +211,16 @@ const buildTwoFactorService = ({
 
     // Uses the code up. Conditional on it still being the same code, so two
     // correct submissions at once succeed only once, and a code replaced by a
-    // newer one in the meantime no longer works.
+    // newer one in the meantime no longer works. Either purpose's code was
+    // emailed to the account's address, so a correct one proves the person
+    // reads that inbox (users.email_verified, migration 031).
     const enables = purpose === 'enable' ? ', two_factor_enabled = TRUE' : '';
     const consumed = await query(
       `UPDATE users
           SET two_factor_code_hash = NULL, two_factor_challenge_hash = NULL, two_factor_purpose = NULL,
               two_factor_expires_at = NULL, two_factor_attempts = 0,
-              two_factor_guesses = 0, two_factor_guesses_started_at = NULL${enables}
+              two_factor_guesses = 0, two_factor_guesses_started_at = NULL,
+              email_verified = TRUE${enables}
         WHERE id = $1 AND two_factor_code_hash = $2`,
       [row.id, row.two_factor_code_hash]
     );

@@ -595,8 +595,8 @@ const loginDb = ({ user = {}, failOn = null } = {}) => {
   const query = async (text, params) => {
     log.push({ text, params });
     if (failOn && failOn.test(text)) throw new Error('db down');
-    if (/password_hash, two_factor_enabled\s+FROM users WHERE email = \$1 AND auth_provider = 'email'/.test(text)) {
-      return params[0] === row.email ? { rows: [{ ...row }], rowCount: 1 } : { rows: [], rowCount: 0 };
+    if (/password_hash, two_factor_enabled\s+FROM users WHERE LOWER\(email\) = LOWER\(\$1\) AND auth_provider = 'email'/.test(text)) {
+      return String(params[0]).toLowerCase() === row.email.toLowerCase() ? { rows: [{ ...row }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
     if (/FROM users WHERE id = \$1 AND auth_provider = 'email'/.test(text)) {
       if (params[0] !== row.id) return { rows: [], rowCount: 0 };

@@ -7,7 +7,8 @@ const { displayName } = require('../utils/displayName');
 const { blockedWithSubquery, notBlockedBetween, idList } = require('../services/blockService');
 
 /**
- * Group events that other members must see: SOS, check-in and deletion.
+ * Group events that other members must see: SOS, check-in, deletion, and a
+ * member's status on a group drive (arrived, stopped, running late, left).
  *
  * The WebSocket server never relays client messages, so the REST handler that
  * accepts an event is the only place it can be delivered from. Each handler
@@ -15,9 +16,8 @@ const { blockedWithSubquery, notBlockedBetween, idList } = require('../services/
  * room and, where a member may be offline, sends a notification (a row in
  * their list, and a push to their phone when they allow group/emergency push).
  *
- * An SOS or check-in never reaches a member in a block with the sender, live
- * or as a notification (services/blockService.js): the frame carries where
- * the sender is.
+ * An SOS, check-in or status never reaches a member in a block with the
+ * sender, live or as a notification (services/blockService.js).
  */
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -36,6 +36,95 @@ const NOTE_MAX_LENGTH = 500;
 const TITLE_MAX_LENGTH = 255;
 
 const NOT_A_MEMBER = 'Not a member of this group';
+
+/**
+ * What a member's own app reports about them on a group drive. The app works
+ * each one out from its position (mobile group_status_detector.dart); `left`
+ * is also sent by the API itself when the member leaves the group.
+ */
+const GROUP_STATUSES = Object.freeze(['arrived', 'stopped', 'delayed', 'left']);
+
+/**
+ * A member's status is shared with the group at most once per this window, for
+ * each status. A phone whose GPS keeps crossing a threshold (stopped, moving,
+ * stopped again in traffic) would otherwise ring every phone in the group each
+ * time. Leaving the group is held to the same window (see announceLeftGroup).
+ */
+const STATUS_REPEAT_WINDOW_SECONDS = 15 * 60;
+
+/**
+ * The group_status_reports row (migration 029) that holds when a member's
+ * leaving the group was last announced, apart from 'left', which is ending
+ * the drive.
+ */
+const LEFT_GROUP_CLAIM = 'left_group';
+
+/** The longest delay a report may carry: a day. */
+const MAX_DELAY_MINUTES = 24 * 60;
+
+/**
+ * "12 min", "1 hr", "2 hr 5 min": the form the app shows an ETA in
+ * (GroupEtaCalculator.formatEta).
+ */
+const formatMinutes = (minutes) => {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+};
+
+/**
+ * Reads delay_minutes: a whole number of minutes from 1 to MAX_DELAY_MINUTES.
+ * Returns { error } or { minutes }. Numeric strings are accepted; a fraction
+ * is rounded.
+ */
+const readDelayMinutes = (value) => {
+  let n;
+  if (typeof value === 'number') n = value;
+  else if (typeof value === 'string' && value.trim() !== '') n = Number(value);
+  else return { error: 'delay_minutes is required for a delayed status' };
+  const minutes = Math.round(n);
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > MAX_DELAY_MINUTES) {
+    return { error: `delay_minutes must be a number from 1 to ${MAX_DELAY_MINUTES}` };
+  }
+  return { minutes };
+};
+
+/**
+ * The notification copy for a status. [reason] tells the two kinds of `left`
+ * apart: 'left_group' (they left the group) or 'ended_drive' (they ended their
+ * group drive and are still in the group). Like the SOS and check-in, the copy
+ * never says where the member is.
+ */
+const statusCopy = ({ status, reason, senderName, groupName, delayMinutes }) => {
+  switch (status) {
+    case 'arrived':
+      return {
+        title: `${senderName} arrived`,
+        message: `${senderName} arrived at the destination of your group "${groupName}".`,
+      };
+    case 'stopped':
+      return {
+        title: `${senderName} has stopped`,
+        message: `${senderName} has stopped on the way, in your group "${groupName}".`,
+      };
+    case 'delayed':
+      return {
+        title: `${senderName} is running late (about ${formatMinutes(delayMinutes)})`,
+        message: `${senderName} is running about ${formatMinutes(delayMinutes)} behind their first arrival estimate, in your group "${groupName}".`,
+      };
+    default:
+      return reason === 'left_group'
+        ? {
+            title: `${senderName} left the group`,
+            message: `${senderName} left your group "${groupName}".`,
+          }
+        : {
+            title: `${senderName} left the group drive`,
+            message: `${senderName} ended their group drive, in your group "${groupName}". They are still in the group.`,
+          };
+  }
+};
 
 /** Truncates by code point so a surrogate pair is never split in half. */
 const truncate = (text, max) => {
@@ -133,7 +222,8 @@ const buildGroupEventHandlers = ({
    */
   const loadMembership = async (groupId, userId) => {
     const result = await query(
-      `SELECT g.group_name, u.name AS user_name, ARRAY${blockedWithSubquery('$2')} AS blocked_with
+      `SELECT g.group_name, u.name AS user_name, ARRAY${blockedWithSubquery('$2')} AS blocked_with,
+              (g.destination_lat IS NOT NULL AND g.destination_lng IS NOT NULL) AS has_destination
          FROM group_members gm
          JOIN groups g ON g.id = gm.group_id
          JOIN users u ON u.id = gm.user_id
@@ -234,6 +324,108 @@ const buildGroupEventHandlers = ({
       message: `${groupName} was deleted by its creator`,
       reference_id: groupId,
     });
+
+  /**
+   * Records that [userId] shared [status] in [groupId] now, unless they did so
+   * within STATUS_REPEAT_WINDOW_SECONDS. True when this report may go out.
+   * One statement, so two requests racing cannot both pass. Throws on a
+   * database error.
+   */
+  const claimStatus = async (groupId, userId, status) => {
+    const result = await query(
+      `INSERT INTO group_status_reports (group_id, user_id, status, reported_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (group_id, user_id, status) DO UPDATE SET reported_at = EXCLUDED.reported_at
+        WHERE group_status_reports.reported_at <= EXCLUDED.reported_at - make_interval(secs => $4)
+       RETURNING reported_at`,
+      [groupId, userId, status, STATUS_REPEAT_WINDOW_SECONDS]
+    );
+    return result.rowCount > 0;
+  };
+
+  /**
+   * Tells the group a member's status: the live frame to everyone not in a
+   * block with them, and a notification for the other active members, which
+   * reaches a phone with the app closed as a push when they allow group push.
+   * Returns { delivered_live, notified }.
+   */
+  const shareStatus = async ({ groupId, senderId, senderName, groupName, blockedWith, status, reason, delayMinutes, at }) => {
+    const frame = {
+      type: 'group_status',
+      user_id: senderId,
+      user_name: senderName,
+      status,
+      at,
+    };
+    if (status === 'delayed') frame.delay_minutes = delayMinutes;
+    if (status === 'left') frame.reason = reason;
+
+    const deliveredLive = broadcastToOthers(groupId, senderId, frame, blockedWith);
+
+    const { title, message } = statusCopy({ status, reason, senderName, groupName, delayMinutes });
+    const data = { kind: 'group_status', status, member_id: senderId };
+    if (status === 'delayed') data.delay_minutes = String(delayMinutes);
+    if (status === 'left') data.reason = reason;
+
+    const notified = await notifyMembers(
+      groupId,
+      await loadOtherActiveMemberIds(groupId, senderId, { skipBlocked: true }),
+      `Group status "${status}"`,
+      {
+        type: 'group',
+        category: 'group',
+        title: truncate(title, TITLE_MAX_LENGTH),
+        message,
+        reference_id: groupId,
+        data,
+      }
+    );
+    return { delivered_live: deliveredLive, notified };
+  };
+
+  /**
+   * Tells the rest of the group that [userId] left it. Called once the leave
+   * is saved, so the names are read without the membership.
+   *
+   * Held to STATUS_REPEAT_WINDOW_SECONDS like any status, under its own row
+   * ('left_group'), so leaving, rejoining by code and leaving again does not
+   * ring the group each time, and ending the drive first ('left') does not
+   * hide the leave.
+   *
+   * Never throws: the leave has happened whatever becomes of the announcement.
+   * Returns { delivered_live, notified, repeated }, or null when it could not
+   * be sent.
+   */
+  const announceLeftGroup = async (groupId, userId) => {
+    try {
+      if (!(await claimStatus(groupId, userId, LEFT_GROUP_CLAIM))) {
+        return { delivered_live: 0, notified: 0, repeated: true };
+      }
+      const result = await query(
+        `SELECT g.group_name, u.name AS user_name, ARRAY${blockedWithSubquery('$2')} AS blocked_with
+           FROM groups g
+           JOIN users u ON u.id = $2
+          WHERE g.id = $1`,
+        [groupId, userId]
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      const shared = await shareStatus({
+        groupId,
+        senderId: userId,
+        senderName: displayName(row.user_name),
+        groupName: row.group_name,
+        blockedWith: idList(row.blocked_with),
+        status: 'left',
+        reason: 'left_group',
+        at: now().toISOString(),
+      });
+      return { ...shared, repeated: false };
+    } catch (err) {
+      console.error(`Announcing that user ${userId} left group ${groupId} failed:`, err.message);
+      return null;
+    }
+  };
 
   const sendSos = async (req, res) => {
     const { id } = req.params;
@@ -364,13 +556,80 @@ const buildGroupEventHandlers = ({
     }
   };
 
-  return { sendSos, checkIn, deleteGroup };
+  const reportStatus = async (req, res) => {
+    const { id } = req.params;
+    try {
+      const receivedAt = now();
+      const body = req.body || {};
+
+      if (!UUID_PATTERN.test(String(id))) return error(res, 'Group id must be a valid UUID', 400);
+
+      const status = typeof body.status === 'string' ? body.status.trim().toLowerCase() : '';
+      if (!GROUP_STATUSES.includes(status)) {
+        return error(res, `status must be one of ${GROUP_STATUSES.join(', ')}`, 400);
+      }
+
+      let delayMinutes;
+      if (status === 'delayed') {
+        const delay = readDelayMinutes(body.delay_minutes);
+        if (delay.error) return error(res, delay.error, 400);
+        delayMinutes = delay.minutes;
+      }
+
+      const member = await loadMembership(id, req.user.id);
+      if (!member) return forbidden(res, NOT_A_MEMBER);
+
+      // Arriving and running late are measured against the group's
+      // destination; a group without one has nothing to arrive at.
+      if ((status === 'arrived' || status === 'delayed') && !member.has_destination) {
+        return error(res, 'This group has no destination, so arrival and delays are not shared', 409);
+      }
+
+      if (!(await claimStatus(id, req.user.id, status))) {
+        return success(
+          res,
+          { delivered_live: 0, notified: 0, repeated: true },
+          'Already shared with the group recently'
+        );
+      }
+
+      const shared = await shareStatus({
+        groupId: id,
+        senderId: req.user.id,
+        senderName: member.user_name,
+        groupName: member.group_name,
+        blockedWith: member.blocked_with,
+        status,
+        reason: 'ended_drive',
+        delayMinutes,
+        at: toIsoTimestamp(body.at, receivedAt),
+      });
+
+      return success(res, { ...shared, repeated: false }, 'Status shared with the group');
+    } catch (err) {
+      console.error(`Group status error (group ${id}, user ${req.user && req.user.id}):`, err);
+      return error(res, 'Failed to share your status', 500);
+    }
+  };
+
+  return { sendSos, checkIn, deleteGroup, reportStatus, announceLeftGroup };
 };
 
-const { sendSos, checkIn, deleteGroup } = buildGroupEventHandlers({
+const { sendSos, checkIn, deleteGroup, reportStatus, announceLeftGroup } = buildGroupEventHandlers({
   query: db.query,
   broadcastToGroup: ws.broadcastToGroup,
   isMemberConnected: ws.isMemberConnected,
 });
 
-module.exports = { buildGroupEventHandlers, sendSos, checkIn, deleteGroup, NOTE_MAX_LENGTH };
+module.exports = {
+  buildGroupEventHandlers,
+  sendSos,
+  checkIn,
+  deleteGroup,
+  reportStatus,
+  announceLeftGroup,
+  NOTE_MAX_LENGTH,
+  GROUP_STATUSES,
+  STATUS_REPEAT_WINDOW_SECONDS,
+  MAX_DELAY_MINUTES,
+};

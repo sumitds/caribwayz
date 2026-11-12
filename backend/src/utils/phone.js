@@ -28,8 +28,42 @@ const normalizeContactPhone = (raw) => {
 /**
  * What two numbers must share to be the same contact: their digits. A number
  * saved once with "+" and once without is still one person.
+ *
+ * Only for keeping a person's own list free of repeats. Matching a contact to
+ * an account uses contactE164, since digits alone confuse countries.
  */
 const contactKey = (phone) => String(phone).replace(/\D/g, '');
+
+/** A NANP number without its country code: area code and exchange start 2-9. */
+const NANP_NATIONAL = /^[2-9][0-9]{2}[2-9][0-9]{6}$/;
+
+/** E.164 after the "+": a country code that does not start with 0, at most 15 digits. */
+const INTERNATIONAL = /^[1-9][0-9]{6,14}$/;
+
+/**
+ * [raw] in E.164 ("+18765550199"), for telling whether a trusted contact is
+ * the number an account verified, or null when that cannot be told safely.
+ *
+ * A number written with a leading "+" or "00" keeps the country code it was
+ * given. One written without either is read as North American (+1), which
+ * most Caribbean territories use, only when it has that shape: 10 digits whose
+ * area code and exchange start 2-9, or the same after a leading 1. Anything
+ * else, such as a 7-digit local number, has no country code to go on and
+ * matches nobody: "501..." could be a Belize number or a US area code.
+ *
+ * Stored contacts are never rewritten with this; it is for comparing only.
+ */
+const contactE164 = (raw) => {
+  const phone = normalizeContactPhone(raw);
+  if (phone === null) return null;
+  let international = null;
+  if (phone.startsWith('+')) international = phone.slice(1);
+  else if (phone.startsWith('00')) international = phone.slice(2);
+  if (international !== null) return INTERNATIONAL.test(international) ? `+${international}` : null;
+  if (NANP_NATIONAL.test(phone)) return `+1${phone}`;
+  if (phone.length === 11 && phone.startsWith('1') && NANP_NATIONAL.test(phone.slice(1))) return `+${phone}`;
+  return null;
+};
 
 /**
  * Checks and cleans a whole contact list. Returns { contacts } with each number
@@ -62,4 +96,4 @@ const readContactList = (value) => {
   return { contacts };
 };
 
-module.exports = { MAX_EMERGENCY_CONTACTS, normalizeContactPhone, contactKey, readContactList };
+module.exports = { MAX_EMERGENCY_CONTACTS, normalizeContactPhone, contactKey, contactE164, readContactList };

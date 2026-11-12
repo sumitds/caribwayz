@@ -503,7 +503,7 @@ const options = {
                               alert_tourism: { type: 'boolean' },
                               priority_level: { type: 'string', enum: ['critical', 'high', 'low'] },
                               push_emergency: { type: 'boolean', description: 'Push for emergencies: responder alerts, group SOS, safety broadcasts. Default true.' },
-                              push_group: { type: 'boolean', description: 'Push for group check-ins and deletions. Default true.' },
+                              push_group: { type: 'boolean', description: 'Push for group check-ins, member statuses (arrived, stopped, running late, left) and deletions. Default true.' },
                               push_reports: { type: 'boolean', description: 'Push when someone confirms your report. Default true.' },
                               push_app_updates: { type: 'boolean', description: 'Push for informational admin broadcasts. Default true.' },
                               push_promotions: { type: 'boolean', description: 'Push for promotional broadcasts. Default false (opt-in).' },
@@ -538,7 +538,7 @@ const options = {
                     alert_tourism: { type: 'boolean' },
                     priority_level: { type: 'string', enum: ['critical', 'high', 'low'] },
                     push_emergency: { type: 'boolean', description: 'Push for emergencies: responder alerts, group SOS, safety broadcasts. Default true.' },
-                    push_group: { type: 'boolean', description: 'Push for group check-ins and deletions. Default true.' },
+                    push_group: { type: 'boolean', description: 'Push for group check-ins, member statuses (arrived, stopped, running late, left) and deletions. Default true.' },
                     push_reports: { type: 'boolean', description: 'Push when someone confirms your report. Default true.' },
                     push_app_updates: { type: 'boolean', description: 'Push for informational admin broadcasts. Default true.' },
                     push_promotions: { type: 'boolean', description: 'Push for promotional broadcasts. Default false (opt-in).' },
@@ -999,11 +999,64 @@ const options = {
           },
         },
       },
+      '/groups/{id}/status': {
+        post: {
+          tags: ['Groups'],
+          summary: "Share the caller's own status on a group drive",
+          description: 'Sent by the member\'s own app when it sees them arrive at the group destination, stop for 5 minutes on the way, fall 10 minutes and a quarter of their first ETA behind it, or end their group drive (`left`). Caller must be an active member. `arrived` and `delayed` need the group to have a destination (409 otherwise).\n\nEach status is shared at most once per member, group and status every 15 minutes: a repeat inside that window answers 200 with `repeated: true` and sends nothing. Otherwise it broadcasts to every open socket in the group room except members in a block with the caller (the sender included):\n\n```json\n{ "type": "group_status", "user_id": "uuid", "user_name": "Ana", "status": "delayed", "delay_minutes": 12, "at": "2026-11-12T12:00:00.000Z" }\n```\n\n`delay_minutes` appears only for `delayed`; `reason` only for `left` (`ended_drive` here, `left_group` when sent by `POST /groups/{id}/leave`). It also writes a `group` notification for every other active member not in a block with the caller, pushed under the `group` category with data `{ kind: "group_status", status, member_id }` (plus `delay_minutes` or `reason`) and `reference_id` the group id. Neither the frame nor the notification carries a position.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['status'],
+                  properties: {
+                    status: { type: 'string', enum: ['arrived', 'stopped', 'delayed', 'left'], example: 'delayed' },
+                    delay_minutes: { type: 'integer', minimum: 1, maximum: 1440, example: 12, description: 'Required for delayed; ignored otherwise' },
+                    at: { type: 'string', format: 'date-time', example: '2026-11-12T12:00:00.000Z' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Shared, or already shared within the window',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean' },
+                      message: { type: 'string', example: 'Status shared with the group' },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          delivered_live: { type: 'integer', example: 2, description: 'Other members with an open WebSocket that received the frame' },
+                          notified: { type: 'integer', example: 3, description: 'Notification rows written; -1 if that write failed' },
+                          repeated: { type: 'boolean', example: false, description: 'True when the same status was shared within the last 15 minutes, so nothing was sent' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            400: { description: 'Invalid group id, status or delay_minutes' },
+            403: { description: 'Not a group member (or the group no longer exists)' },
+            409: { description: 'arrived or delayed for a group without a destination' },
+            429: { description: 'More than 30 status requests to this group in 10 minutes' },
+          },
+        },
+      },
       '/ws/groups/location': {
         get: {
           tags: ['Groups'],
           summary: 'WebSocket — real-time group member locations',
-          description: `Connect via WebSocket (not HTTP) to receive live location updates for every member in a group.\n\n**URL:** \`wss://caribwayz-api-new.onrender.com/ws/groups/location?token=<JWT>&group_id=<uuid>\`\n\n**Query params (required):**\n- \`token\` — JWT from /auth/login\n- \`group_id\` — UUID of the group to subscribe to\n\n**On connect — server sends:**\n\`\`\`json\n{ "type": "connected", "group_id": "...", "user_id": "..." }\n\`\`\`\n\n**On each member location update — server broadcasts:**\n\`\`\`json\n{\n  "type": "location_update",\n  "user_id": "uuid",\n  "user_name": "John",\n  "current_latitude": 10.6918,\n  "current_longitude": -61.2225,\n  "timestamp": 1720000000000\n}\n\`\`\`\n\nUpdates are triggered automatically whenever a member calls \`POST /groups/{id}/location\`.\n\n**Other frames:** \`sos\` (from \`POST /groups/{id}/sos\`), \`check_in\` (from \`POST /groups/{id}/check-in\`) and \`group_deleted\` (from \`DELETE /groups/{id}\`). The server does not relay messages sent by clients.`,
+          description: `Connect via WebSocket (not HTTP) to receive live location updates for every member in a group.\n\n**URL:** \`wss://caribwayz-api-new.onrender.com/ws/groups/location?token=<JWT>&group_id=<uuid>\`\n\n**Query params (required):**\n- \`token\` — JWT from /auth/login\n- \`group_id\` — UUID of the group to subscribe to\n\n**On connect — server sends:**\n\`\`\`json\n{ "type": "connected", "group_id": "...", "user_id": "..." }\n\`\`\`\n\n**On each member location update — server broadcasts:**\n\`\`\`json\n{\n  "type": "location_update",\n  "user_id": "uuid",\n  "user_name": "John",\n  "current_latitude": 10.6918,\n  "current_longitude": -61.2225,\n  "timestamp": 1720000000000\n}\n\`\`\`\n\nUpdates are triggered automatically whenever a member calls \`POST /groups/{id}/location\`.\n\n**Other frames:** \`sos\` (from \`POST /groups/{id}/sos\`), \`check_in\` (from \`POST /groups/{id}/check-in\`), \`group_status\` (from \`POST /groups/{id}/status\` and \`POST /groups/{id}/leave\`) and \`group_deleted\` (from \`DELETE /groups/{id}\`). The server does not relay messages sent by clients.`,
           parameters: [
             { name: 'token', in: 'query', required: true, schema: { type: 'string' }, description: 'JWT bearer token' },
             { name: 'group_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Group to subscribe to' },
@@ -1019,7 +1072,7 @@ const options = {
         post: {
           tags: ['Groups'],
           summary: 'Send group invitations via email',
-          description: 'Sends an email with the group join code to one or more addresses. Caller must be an active group member.',
+          description: 'Sends an email with the group join code to one or more addresses. Caller must be an active group member. An address that belongs to a CaribWayz account (matched case-insensitively) also gets an in-app invite, a notification and a push (type group, data kind=group_invite and invite_id) to answer with Join or Decline; see /groups/invites.',
           security: [{ bearerAuth: [] }],
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
           requestBody: {
@@ -1049,10 +1102,70 @@ const options = {
           },
         },
       },
+      '/groups/invites': {
+        get: {
+          tags: ['Groups'],
+          summary: 'My group invitations still to answer',
+          description: 'Pending invites to the caller, newest first. An invite lasts 7 days from when it was sent (or sent again); older ones, and ones from someone in a block with the caller, are left out.',
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: {
+              description: 'data.invites: [{ id, group_id, group_name, inviter_name, created_at, expires_at }]',
+            },
+          },
+        },
+      },
+      '/groups/invites/{inviteId}/accept': {
+        post: {
+          tags: ['Groups'],
+          summary: 'Accept a group invitation',
+          description: 'Joins the group by the same rules as the join code. Only the invitee may accept; anyone else gets 404.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'inviteId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: {
+            required: false,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    current_latitude: { type: 'number', example: 10.6918 },
+                    current_longitude: { type: 'number', example: -61.2225 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Joined. data: { group, invite: { id, status: 'accepted' } }" },
+            400: { description: 'inviteId is not a UUID' },
+            403: { description: "You can't join this group (a member blocked the caller)" },
+            404: { description: 'No such invite for the caller (also when the group was deleted)' },
+            409: { description: 'Already accepted, declined, or already a member' },
+            410: { description: 'The invitation expired' },
+          },
+        },
+      },
+      '/groups/invites/{inviteId}/decline': {
+        post: {
+          tags: ['Groups'],
+          summary: 'Decline a group invitation',
+          description: 'Only the invitee may decline; anyone else gets 404. Declining again, or declining an expired invite, is answered as done.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'inviteId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: {
+            200: { description: "data: { invite: { id, status } }" },
+            400: { description: 'inviteId is not a UUID' },
+            404: { description: 'No such invite for the caller' },
+            409: { description: 'The invitation was already accepted' },
+          },
+        },
+      },
       '/groups/{id}/leave': {
         post: {
           tags: ['Groups'],
           summary: 'Leave a group',
+          description: 'The rest of the group is told: a `group_status` frame with `status: "left"` and `reason: "left_group"`, and a `group` notification ("Ana left the group"), both leaving out members in a block with the caller. Failing to tell them never fails the leave.',
           security: [{ bearerAuth: [] }],
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
           responses: { 200: { description: 'Left group successfully' } },

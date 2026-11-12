@@ -39,10 +39,13 @@ describe('the legal text', () => {
   });
 
   test('both documents read with a title, version, date and sections', () => {
-    for (const [text, title] of [[privacyPolicy, 'CaribWayz Privacy Policy'], [termsOfService, 'CaribWayz Terms of Service']]) {
+    for (const [text, title, version] of [
+      [privacyPolicy, 'CaribWayz Privacy Policy', '0.3 (draft)'],
+      [termsOfService, 'CaribWayz Terms of Service', '0.2 (draft)'],
+    ]) {
       const doc = parseLegalDocument(text);
       assert.equal(doc.title, title);
-      assert.equal(doc.version, '0.2 (draft)');
+      assert.equal(doc.version, version);
       assert.match(doc.lastUpdated, /2026/);
       assert.ok(doc.blocks.some((b) => b.type === 'heading' && b.level === 2));
       assert.ok(doc.blocks.some((b) => b.type === 'bullet'));

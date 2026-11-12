@@ -9,17 +9,23 @@ const { generateCode: generateSixDigitCode, digestMatches, sha256Hex } = require
 const { sessionService, clientPlatform } = require('../services/sessionService');
 const { buildTwoFactorService } = require('../services/twoFactorService');
 const { normalizeContactPhone } = require('../utils/phone');
+const contactAlertService = require('../services/contactAlertService');
 
 const register = async (req, res) => {
   try {
     // user_type is self-declared and grants no access. Emergency-responder
     // authorization is users.is_responder, which only an admin can set through
     // PATCH /api/v1/admin/users/:id/responder. See middleware/auth.js.
-    const { name, email, phone, emergency_contact, user_type, password } = req.body;
+    const { name, phone, emergency_contact, user_type, password } = req.body;
+    // Kept in one case, and checked in any case, so "Ana@x.com" cannot be
+    // registered beside "ana@x.com" (migration 031 indexes LOWER(email)).
+    // The address is not verified here: users.email_verified stays false
+    // until the person enters a code that was emailed to it.
+    const email = normalizeEmail(req.body.email);
 
-    const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+    const existing = await query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
     if (existing.rows.length > 0) {
-      return error(res, 'Email already registered', 409);
+      return error(res, EMAIL_TAKEN, 409);
     }
 
     const password_hash = await bcrypt.hash(password, 12);
@@ -29,12 +35,19 @@ const register = async (req, res) => {
     // but is not put on the list of numbers to text.
     const firstContact = normalizeContactPhone(emergency_contact);
 
-    const result = await query(
-      `INSERT INTO users (name, email, phone, emergency_contact, emergency_contacts, user_type, password_hash, auth_provider, role)
-       VALUES ($1, $2, $3, $4, $5::text[], $6, $7, 'email', 'user')
-       RETURNING id, name, email, phone, emergency_contact, emergency_contacts, user_type, role, status, is_responder, created_at`,
-      [name, email, phone, emergency_contact, firstContact ? [firstContact] : [], user_type || 'CaribDrivers', password_hash]
-    );
+    let result;
+    try {
+      result = await query(
+        `INSERT INTO users (name, email, phone, emergency_contact, emergency_contacts, user_type, password_hash, auth_provider, role)
+         VALUES ($1, $2, $3, $4, $5::text[], $6, $7, 'email', 'user')
+         RETURNING id, name, email, phone, emergency_contact, emergency_contacts, user_type, role, status, is_responder, created_at`,
+        [name, email, phone, emergency_contact, firstContact ? [firstContact] : [], user_type || 'CaribDrivers', password_hash]
+      );
+    } catch (err) {
+      // Another sign-up of the same address got in after the check above.
+      if (err.code === UNIQUE_VIOLATION) return error(res, EMAIL_TAKEN, 409);
+      throw err;
+    }
 
     await query(
       `INSERT INTO user_preferences (user_id) VALUES ($1)`,
@@ -50,6 +63,19 @@ const register = async (req, res) => {
     return error(res, 'Registration failed', 500);
   }
 };
+
+const EMAIL_TAKEN = 'Email already registered';
+
+/** An email address as stored at sign-up: trimmed and in lower case. */
+const normalizeEmail = (value) => String(value).trim().toLowerCase();
+
+/**
+ * The email account /login, /forgot-password and /verify-otp act on for the
+ * address typed. Matched in any case, as sign-up now stores addresses in lower
+ * case; where two older accounts differ only in case, the exact spelling wins,
+ * then the older account. $1 is the address as typed.
+ */
+const EMAIL_ACCOUNT_ORDER = 'ORDER BY (email = $1) DESC, created_at ASC LIMIT 1';
 
 // ── Sign-in with Firebase and password reset ───────────────────────────────
 
@@ -179,6 +205,10 @@ const usablePhotoUrl = (url) =>
  *   ends the caller's session at /logout.
  * @param {(args: {userId: string}) => Promise<number>} [deps.revokeAllSessions]
  *   signs the account out everywhere when a reset code is accepted.
+ * @param {(userId: string, phone: string) => Promise<boolean>} [deps.recordVerifiedPhone]
+ *   keeps the number a phone sign-in proved (services/contactAlertService.js),
+ *   the only number a trusted contact's emergency is matched on. Without it
+ *   phone sign-in works and the account is simply never matched.
  */
 const buildAuthHandlers = ({
   query,
@@ -195,6 +225,7 @@ const buildAuthHandlers = ({
   revokeAllSessions = null,
   twoFactor = null,
   comparePassword = (plain, hash) => bcrypt.compare(plain, hash),
+  recordVerifiedPhone = null,
 }) => {
   /** The token for a sign-in by [method], recorded as a session. */
   const tokenFor = async (req, user, method) => {
@@ -215,6 +246,37 @@ const buildAuthHandlers = ({
       [uid]
     );
     return result.rows[0] || null;
+  };
+
+  /**
+   * Remembers the number a phone sign-in just proved. A failure is logged and
+   * does not fail the sign-in: the person is who the token says, and the only
+   * loss is that trusted contacts' alerts do not reach them in the app until
+   * their next phone sign-in. The number itself is never logged.
+   */
+  const rememberVerifiedPhone = async (userId, phone) => {
+    if (!recordVerifiedPhone) return;
+    try {
+      const stored = await recordVerifiedPhone(userId, phone);
+      if (!stored) console.warn(`Phone sign-in for user ${userId}: the confirmed number is not one a contact could save; not recorded`);
+    } catch (err) {
+      console.error(`Recording the confirmed phone number failed for user ${userId}:`, err.message);
+    }
+  };
+
+  /**
+   * Records that [userId] owns their email address: a Google or Facebook
+   * token said the provider verified it, and it is the address on the
+   * account. Like rememberVerifiedPhone, a failure is logged and does not fail
+   * the sign-in; the only loss is that in-app group invites wait until the
+   * next sign-in.
+   */
+  const rememberEmailVerified = async (userId) => {
+    try {
+      await query('UPDATE users SET email_verified = true WHERE id = $1 AND email_verified = false', [userId]);
+    } catch (err) {
+      console.error(`Recording the verified email failed for user ${userId}:`, err.message);
+    }
   };
 
   /**
@@ -254,11 +316,13 @@ const buildAuthHandlers = ({
     const client = await getClient();
     try {
       await client.query('BEGIN');
+      // Only an address the provider verified is ever passed in, so one that
+      // is stored is a verified one (users.email_verified, migration 031).
       const inserted = await client.query(
-        `INSERT INTO users (name, email, phone, profile_image, password_hash, auth_provider, role)
-         VALUES ($1, $2, $3, $4, NULL, $5, 'user')
+        `INSERT INTO users (name, email, phone, profile_image, password_hash, auth_provider, role, email_verified)
+         VALUES ($1, $2, $3, $4, NULL, $5, 'user', $6)
          RETURNING ${userColumns()}`,
-        [name, email, phone, profileImage, provider]
+        [name, email, phone, profileImage, provider, email !== null]
       );
       const user = inserted.rows[0];
       await client.query('INSERT INTO user_preferences (user_id) VALUES ($1)', [user.id]);
@@ -293,9 +357,10 @@ const buildAuthHandlers = ({
         const { decoded } = verified;
         const uid = decoded.uid;
 
-        // 1. A returning user: the identity is already known.
-        const known = await findByFirebaseUid(uid);
-        if (known) return signInExisting(req, res, known, provider);
+        // The number Firebase confirmed by text, for a phone sign-in.
+        const confirmedPhone = provider === 'phone' && isNonEmptyString(decoded.phone_number)
+          ? decoded.phone_number.trim()
+          : null;
 
         // What the verified token says. Email, name and photo never come from
         // the request body; only a name for a brand-new account may.
@@ -303,6 +368,20 @@ const buildAuthHandlers = ({
           ? decoded.email.trim()
           : null;
         const emailVerified = decoded.email_verified === true;
+
+        // 1. A returning user: the identity is already known.
+        const known = await findByFirebaseUid(uid);
+        if (known) {
+          if (known.status !== 'suspended') {
+            if (confirmedPhone) await rememberVerifiedPhone(known.id, confirmedPhone);
+            // Only when the provider vouches for the very address on the account.
+            if (tokenEmail && emailVerified && isNonEmptyString(known.email)
+              && normalizeEmail(known.email) === normalizeEmail(tokenEmail)) {
+              await rememberEmailVerified(known.id);
+            }
+          }
+          return signInExisting(req, res, known, provider);
+        }
 
         let phone = null;
         if (provider === 'phone') {
@@ -357,13 +436,17 @@ const buildAuthHandlers = ({
           // before the identity, so with an email the loser trips
           // users_email_key, not user_identities_pkey: look the uid up either way.
           const raced = await findByFirebaseUid(uid);
-          if (raced) return signInExisting(req, res, raced, provider);
-          if (err.constraint === 'users_email_key') {
+          if (raced) {
+            if (confirmedPhone && raced.status !== 'suspended') await rememberVerifiedPhone(raced.id, confirmedPhone);
+            return signInExisting(req, res, raced, provider);
+          }
+          if (err.constraint === 'users_email_key' || err.constraint === 'users_email_lower_key') {
             return failWithCode(res, 409, MESSAGES.EMAIL_IN_USE, 'EMAIL_IN_USE');
           }
           throw err;
         }
 
+        if (confirmedPhone) await rememberVerifiedPhone(user.id, confirmedPhone);
         return signedIn(req, res, user, true, provider);
       } catch (err) {
         console.error(`${provider} sign-in error:`, err);
@@ -385,7 +468,8 @@ const buildAuthHandlers = ({
       // Same accounts /login accepts: an email+password account that is active.
       const result = await query(
         `SELECT id, email FROM users
-          WHERE email = $1 AND auth_provider = 'email' AND status = 'active'`,
+          WHERE LOWER(email) = LOWER($1) AND auth_provider = 'email' AND status = 'active'
+          ${EMAIL_ACCOUNT_ORDER}`,
         [email]
       );
       if (result.rows.length === 0) {
@@ -473,7 +557,10 @@ const buildAuthHandlers = ({
                 reset_guesses = CASE
                   WHEN reset_guesses_started_at IS NULL OR reset_guesses_started_at <= $4 THEN 1
                   ELSE reset_guesses + 1 END
-          WHERE email = $1 AND auth_provider = 'email' AND status = 'active'
+          WHERE id = (SELECT id FROM users
+                       WHERE LOWER(email) = LOWER($1) AND auth_provider = 'email' AND status = 'active'
+                       ${EMAIL_ACCOUNT_ORDER})
+            AND auth_provider = 'email' AND status = 'active'
             AND reset_code_hash IS NOT NULL
             AND reset_code_expires_at > $2
             AND reset_attempts < $3
@@ -512,11 +599,13 @@ const buildAuthHandlers = ({
       // Consumes the code. Conditional on it still being the same code, so
       // two correct submissions at once reset the password only once, and a
       // code replaced by a newer request in the meantime no longer works.
+      // The code was emailed to the account's address, so entering it proves
+      // the person reads that inbox (users.email_verified, migration 031).
       const consumed = await query(
         `UPDATE users
             SET password_hash = $1, reset_code_hash = NULL, reset_code_expires_at = NULL,
                 reset_attempts = 0, reset_guesses = 0, reset_guesses_started_at = NULL,
-                updated_at = NOW()
+                email_verified = true, updated_at = NOW()
           WHERE id = $2 AND reset_code_hash = $3`,
         [password_hash, row.id, row.reset_code_hash]
       );
@@ -539,7 +628,8 @@ const buildAuthHandlers = ({
 
       const result = await query(
         `SELECT ${userColumns()}, password_hash, two_factor_enabled
-           FROM users WHERE email = $1 AND auth_provider = 'email'`,
+           FROM users WHERE LOWER(email) = LOWER($1) AND auth_provider = 'email'
+           ${EMAIL_ACCOUNT_ORDER}`,
         [email]
       );
 
@@ -672,6 +762,7 @@ const {
   startSession: (args) => sessionService().startSession(args),
   revokeSession: (args) => sessionService().revokeSession(args),
   revokeAllSessions: (args) => sessionService().revokeAllSessions(args),
+  recordVerifiedPhone: (userId, phone) => contactAlertService.recordVerifiedPhone(userId, phone),
   twoFactor: buildTwoFactorService({
     query,
     isEmailConfigured: emailService.isEmailConfigured,

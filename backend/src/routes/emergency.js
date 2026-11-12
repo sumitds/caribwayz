@@ -10,8 +10,10 @@ const {
   resolveEmergency,
   acknowledgeEmergency,
   releaseEmergency,
+  updateAlertLocation,
   EMERGENCY_TYPES,
 } = require('../controllers/emergencyController');
+const { getContactAlert, listContactAlerts } = require('../controllers/emergencyContactAlertController');
 
 router.use(authenticate);
 
@@ -50,8 +52,38 @@ router.post(
 // because these rows are the live locations of people in trouble.
 router.get('/', requireResponder, listEmergencies);
 
+// Alerts raised by people who have the caller as a trusted contact. Declared
+// before '/:id' for the same reason as the feed.
+router.get('/contact-alerts', listContactAlerts);
+router.get('/contact-alerts/:id', getContactAlert);
+
 router.get('/:id', getEmergencyStatus);
 router.post('/:id/resolve', resolveEmergency);
+
+// The sender's phone sends where they are every 15 to 30 seconds while the
+// alert is open. Twelve a minute leaves room for a retry after a dropped
+// connection; more than that is not a phone keeping a map current.
+const LOCATION_UPDATE_LIMIT = 12;
+const LOCATION_UPDATE_WINDOW_MS = 60 * 1000;
+
+router.patch(
+  '/:id/location',
+  perUser(
+    LOCATION_UPDATE_LIMIT,
+    LOCATION_UPDATE_WINDOW_MS,
+    'Your location is being sent too often. It will be sent again shortly.'
+  ),
+  [
+    body('latitude')
+      .isFloat({ min: -90, max: 90 })
+      .withMessage('Valid latitude required'),
+    body('longitude')
+      .isFloat({ min: -180, max: 180 })
+      .withMessage('Valid longitude required'),
+  ],
+  validate,
+  updateAlertLocation
+);
 
 // The emergency desk: an operator takes an alert so no two answer the same
 // SOS, and can hand it back. Responders and admins only.

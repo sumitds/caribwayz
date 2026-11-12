@@ -8,9 +8,9 @@ const privacyPolicy = `# CaribWayz Privacy Policy
 
 > DRAFT - pending legal review. This text has not yet been approved by a lawyer and may change before it takes effect.
 
-Version: 0.2 (draft)
+Version: 0.3 (draft)
 
-Last updated: 11 November 2026
+Last updated: 12 November 2026
 
 ## 1. Who we are
 
@@ -29,7 +29,7 @@ We have written it to match what the app actually does. Where something stays on
 ## 3. The short version
 
 - We use your location to give you maps, directions, nearby places, weather and road safety alerts.
-- Your live position is shared with other people only when you choose to: during a group trip, when you send an SOS, or when you text your emergency contact.
+- Your live position is shared with other people only when you choose to: during a group trip, when you send an SOS (to the CaribWayz team, and in the app to your trusted contacts who use CaribWayz), or when you text your emergency contact.
 - Your recorded trips, recent searches, saved places and medical details stay on your phone. Your medical details leave your phone only if you switch on "Share medical info on emergency" and then send an SOS or crash alert.
 - We do not sell your information, we do not show adverts, and the app does not use advertising identifiers or analytics trackers.
 - You can download a copy of your data and delete your account from inside the app at any time.
@@ -47,12 +47,15 @@ When you create an account we collect:
 - The kind of user you told us you are when you signed up.
 - Your profile photo, if you add one. If you sign in with Google or Facebook, we may use the profile photo from that account.
 - How you sign in (email, Google, Facebook or phone) and the identifier Firebase gives that sign-in, so we know which CaribWayz account it belongs to.
+- Whether your email address is verified, and the phone number you confirmed with a text message code the last time you signed in with your phone number. We record your email address as verified when Google or Facebook tell us they have verified it, or when you enter a password reset code we emailed to it. We use these so that group invitations and emergency alerts in the app reach only the person who owns that email address or phone number.
 
 ### 4.2 Your emergency contact
 
-You can save one emergency contact, as a phone number, in your profile. It is stored with your account on our servers. CaribWayz never sends this person a message itself. When you choose to alert them, the app opens your own messaging app with a message ready, and nothing is sent until you press send.
+You can save up to five trusted contacts, as phone numbers, in your profile; the first is your emergency contact. They are stored with your account on our servers. CaribWayz never sends them a text message itself. When you choose to alert them, the app opens your own messaging app with a message ready, and nothing is sent until you press send.
 
-Because this is another person's phone number, please only save it if they are happy for you to do so.
+If one of your trusted contacts has a CaribWayz account and confirmed that phone number in the app, they are also told in the app when you send an SOS or crash alert to the CaribWayz team (see section 4.7).
+
+Because these are other people's phone numbers, please only save them if they are happy for you to do so.
 
 ### 4.3 Your medical details
 
@@ -80,7 +83,7 @@ Location while the app is not on screen: CaribWayz never asks for "Allow all the
 Your location is sent to our servers only in these cases:
 
 - Group trips. While you are in a group trip, your live position is sent to our servers and shown to the other members of that group, with your name and estimated arrival time. Only the latest position is kept; each update replaces the one before. It is removed when you leave the group or delete your account. The position you were at when you joined the group is also kept with your group membership.
-- SOS and crash alerts. When you send an alert to the CaribWayz team, your position at that moment is sent with it.
+- SOS and crash alerts. When you send an alert to the CaribWayz team, your position at that moment is sent with it. While the alert is open, your position is also sent about every 20 seconds so your trusted contacts who use CaribWayz can follow it (see section 4.7).
 - Road reports. When you post a road report, the place you reported is stored with it.
 - Saved routes. When you save a route, its start and end points and addresses are stored with your account.
 - Member businesses. To show CaribWayz member businesses near you, on the map, in Businesses and while you drive, the app sends your position at that moment to our servers. It is used only to find the businesses near it and is not stored.
@@ -113,6 +116,8 @@ When you send an SOS or a crash alert to the CaribWayz team, we store:
 
 The people who handle alerts see your name and phone number with the alert, so they can reach you.
 
+Your trusted contacts who use CaribWayz. When you send an SOS or crash alert to the CaribWayz team, each of your trusted contacts who has a CaribWayz account and a phone number they confirmed in the app is also notified in the app. Until you mark yourself safe ("I'm safe") or the alert is closed, they can open it and see your live location, your name, the type of emergency and the phone number you confirmed in the app. While the alert is open and CaribWayz is open on your phone, the app sends your location to our servers about every 20 seconds, for up to two hours, and each update replaces the one before. When the alert closes, sending stops and your location is no longer shown to them; for one day afterwards they can still see that the alert was closed, without your location. Someone you take off your trusted contacts, or have blocked, can no longer open it. We keep with the alert the last location your phone sent and a record of which accounts were notified (see section 8).
+
 If your phone detects a likely crash or you shake it to ask for help, the motion readings are checked on your phone only. Nothing is sent unless the countdown ends or you choose to send help. Your phone keeps a list of its last 50 detections (time, what was detected, what happened next, and the place if "Save location history" is on) so you can include one in an insurance report. This list stays on your phone and is included when you download your personal data.
 
 ### 4.8 Incident records
@@ -125,9 +130,11 @@ Incident records often contain other people's details. Please only enter what yo
 
 When you create or join a group, we store the group's name, its join code, its destination, who is in it and when they joined. Other members see your name, profile photo, live position and arrival time during the trip.
 
-If you invite someone by email, we send that person one email with the group name, your name and the join code. We do not keep their email address afterwards.
+If you invite someone by email, we send that person one email with the group name, your name and the join code. We do not keep their email address afterwards. If the address belongs to a CaribWayz account whose email address is verified (see section 4.1), that person also sees the invitation in the app, with your name and the group name, and can join or decline it there. We keep a record of the invitation: who invited whom, to which group, and whether it was accepted, declined or has expired. An invitation not answered within 7 days expires.
 
 When you send a group SOS or check in, the other members get a notification with your name and the group name.
+
+During a group drive, the other members also get a notification when you arrive at the destination, stop on the way, are running late (with about how late) or end the drive or leave the group. These notifications carry your name and the group name, not your location. Your phone works these out from your location; our servers keep only which of these was last shared and when, not where you were.
 
 ### 4.10 Notifications
 
@@ -160,7 +167,7 @@ We do not use advertising identifiers, analytics or tracking tools, or a crash-r
 ## 5. Why we use your information, and our legal basis
 
 - To provide the service you asked for: your account, maps, directions, searches, group trips, road reports, incident records, notifications, data download and account deletion. We rely on this being necessary to provide the service under our Terms of Service.
-- To handle emergencies: to receive and act on SOS and crash alerts you send. We rely on your request and, where your life or health may be at risk, on protecting your vital interests.
+- To handle emergencies: to receive and act on SOS and crash alerts you send, and to let your trusted contacts who use CaribWayz know and follow your location until you are safe. We rely on your request and, where your life or health may be at risk, on protecting your vital interests.
 - To use your medical details in an emergency: we rely on your explicit consent, given when you switch on "Share medical info on emergency".
 - To use your location while the app is not on screen during a trip: we rely on your consent, given by turning on Navigation alerts and through your phone's location permission.
 - To keep CaribWayz safe and working: preventing misuse, securing accounts, fixing faults and dealing with harmful road reports. We rely on our legitimate interest in running a safe service.
@@ -176,11 +183,12 @@ We do not sell your personal information, and we do not share it with advertiser
 
 ### 6.1 People you choose to share with
 
-- Your group, during a group trip (see section 4.9).
+- Your group, during a group trip (see section 4.9), including when you arrive, stop, are running late or leave.
 - The CaribWayz emergency team and the emergency responders we approve, when you send an SOS or crash alert. They can see your name, phone number, location, what you told us and, if you allowed it, your medical details. They may pass this to the police, fire or ambulance service to get you help.
 - Your emergency contact, when you send them a text message from your phone.
+- Your trusted contacts who have a CaribWayz account and a phone number they confirmed in the app, when you send an SOS or crash alert to the CaribWayz team. Until you mark yourself safe or the alert closes, they see your live location, your name, the type of emergency and the phone number you confirmed in the app (see section 4.7).
 - Other drivers, who see your road reports without your name.
-- People you invite to a group by email.
+- People you invite to a group by email, and, in the app, the CaribWayz account with that verified email address.
 
 ### 6.2 Companies that run parts of the service for us
 
@@ -217,6 +225,8 @@ When we send your information abroad, we take steps so that it stays protected t
 - Your account and everything linked to it on our servers (profile, emergency contact, preferences, saved routes, road reports, emergency alerts, incident records, group memberships, notifications and push tokens) are kept until you delete your account.
 - Road reports disappear from the map when they expire, but stay linked to your account until you delete it.
 - Your live group position is replaced with every update, and is removed when you leave the group or delete your account.
+- The last location your phone sent during an emergency alert stays with the alert after it closes, though your trusted contacts can no longer see it, and is deleted with the alert when you delete your account. The record of which trusted contacts were notified is kept with the alert in the same way, and a contact's entry is also removed if they delete their account.
+- Group invitations, and the record of which group status was last shared and when, are kept until the group or the account is deleted.
 - Password reset codes stop working after they expire.
 - Server error records are kept for [Server log retention period].
 - Copies in backups, where our hosting provider keeps them, are removed within [Backup retention period].
