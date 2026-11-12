@@ -5,6 +5,9 @@ const { sendGroupInvite } = require('../services/emailService');
 const { broadcastLocation } = require('../services/wsService');
 const { displayName } = require('../utils/displayName');
 const { blockedWithSubquery, notBlockedBetween, idList } = require('../services/blockService');
+const { addMember, BLOCKED, ALREADY_MEMBER, BLOCKED_MESSAGE, ALREADY_MEMBER_MESSAGE } = require('../services/groupMembership');
+const { createInvites } = require('./groupInviteController');
+const { announceLeftGroup } = require('./groupEventController');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -70,41 +73,15 @@ const joinGroup = async (req, res) => {
 
     const group = groupResult.rows[0];
 
-    // Someone in the group blocked this person, who would otherwise be one
-    // join code away from their live location. The message does not say who.
-    const blockedBy = await query(
-      `SELECT 1 FROM group_members gm
-         JOIN user_blocks ub ON ub.blocker_id = gm.user_id
-        WHERE gm.group_id = $1 AND gm.status = 'active' AND ub.blocked_id = $2
-        LIMIT 1`,
-      [group.id, req.user.id]
-    );
-    if (blockedBy.rows.length > 0) return forbidden(res, "You can't join this group.");
-
-    const existing = await query(
-      'SELECT id, status FROM group_members WHERE group_id = $1 AND user_id = $2',
-      [group.id, req.user.id]
-    );
-
-    if (existing.rows.length > 0) {
-      if (existing.rows[0].status === 'active') {
-        return error(res, 'You are already a member of this group', 409);
-      }
-      await query(
-        `UPDATE group_members
-         SET status = 'active', joined_at = NOW(),
-             current_latitude = $1, current_longitude = $2, location_updated_at = NOW()
-         WHERE group_id = $3 AND user_id = $4`,
-        [current_latitude ?? null, current_longitude ?? null, group.id, req.user.id]
-      );
-    } else {
-      await query(
-        `INSERT INTO group_members (group_id, user_id, current_latitude, current_longitude, location_updated_at)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [group.id, req.user.id, current_latitude ?? null, current_longitude ?? null,
-         current_latitude ? new Date() : null]
-      );
-    }
+    // The same rules as accepting an invite in the app (services/groupMembership.js).
+    const outcome = await addMember(query, {
+      groupId: group.id,
+      userId: req.user.id,
+      latitude: current_latitude,
+      longitude: current_longitude,
+    });
+    if (outcome === BLOCKED) return forbidden(res, BLOCKED_MESSAGE);
+    if (outcome === ALREADY_MEMBER) return error(res, ALREADY_MEMBER_MESSAGE, 409);
 
     return success(res, { group }, 'Joined group successfully');
   } catch (err) {
@@ -176,6 +153,10 @@ const leaveGroup = async (req, res) => {
     } catch (fbErr) {
       console.warn('Firebase cleanup error:', fbErr.message);
     }
+
+    // The rest of the group is told, live and as a notification, so leaving
+    // needs no second request from the app. It never fails the leave.
+    await announceLeftGroup(id, req.user.id);
 
     return success(res, {}, 'Left group successfully');
   } catch (err) {
@@ -302,12 +283,24 @@ const inviteToGroup = async (req, res) => {
     const leftOff = new Set(blocked.rows.map((row) => row.email));
     const recipients = email.filter((address) => !leftOff.has(String(address).trim().toLowerCase()));
 
+    // The email goes first. Only once it has gone is anyone on the list with
+    // a CaribWayz account also invited in the app, with a push they can answer
+    // with Join or Decline; a send that fails fails the request before anyone
+    // is pushed, so trying again does not push everyone twice. The in-app
+    // invite never fails the request: the email already carries the join code.
     if (recipients.length > 0) {
       await sendGroupInvite({
         toEmails: recipients,
         groupName: group.group_name,
         joinCode: group.join_code,
         inviterName: displayName(member.rows[0].user_name),
+      });
+      await createInvites({
+        groupId: group.id,
+        groupName: group.group_name,
+        inviterId: req.user.id,
+        inviterName: displayName(member.rows[0].user_name),
+        emails: recipients,
       });
     }
 

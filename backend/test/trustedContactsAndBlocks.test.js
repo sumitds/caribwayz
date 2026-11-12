@@ -10,7 +10,7 @@ const path = require('node:path');
 const express = require('express');
 
 const {
-  MAX_EMERGENCY_CONTACTS, normalizeContactPhone, contactKey, readContactList,
+  MAX_EMERGENCY_CONTACTS, normalizeContactPhone, contactKey, contactE164, readContactList,
 } = require('../src/utils/phone');
 const { buildBlockHandlers } = require('../src/controllers/blockController');
 const { buildEmergencyContactHandlers } = require('../src/controllers/emergencyContactsController');
@@ -61,6 +61,39 @@ describe('phone numbers for trusted contacts', () => {
 
   test('a number with and without + is the same contact', () => {
     assert.equal(contactKey('+18765550199'), contactKey('18765550199'));
+  });
+
+  test('contactE164 keeps a written country code, and reads a NANP-shaped number as +1', () => {
+    for (const [raw, e164] of [
+      ['+18765550199', '+18765550199'],
+      ['+1 (876) 555-0199', '+18765550199'],
+      ['001 876 555 0199', '+18765550199'],
+      ['876-555-0199', '+18765550199'],
+      ['(876) 555 0199', '+18765550199'],
+      ['1 876 555 0199', '+18765550199'],
+      ['+501 222 3333', '+5012223333'],
+      ['00501 222 3333', '+5012223333'],
+      ['501-222-3333', '+15012223333'],
+      ['+44 20 7946 0958', '+442079460958'],
+    ]) {
+      assert.equal(contactE164(raw), e164, raw);
+    }
+  });
+
+  test('contactE164 gives no number where the country cannot be told', () => {
+    for (const raw of [
+      '5550199', '555-0199', // 7-digit local
+      '1 176 555 0199', // 1 + an area code starting with 1
+      '1876555019', // 10 digits whose area code starts with 1
+      '8761550199', // exchange starting with 1
+      '0876 555 0199', // trunk prefix, not international
+      '28765550199', // 11 digits not starting with 1
+      '+0876555019', // country code cannot start with 0
+      '+123456', // too short to be a number
+      '', 'NA', null, undefined, 18765550199,
+    ]) {
+      assert.equal(contactE164(raw), null, String(raw));
+    }
   });
 
   test('a list is cleaned, de-duplicated in order, and capped', () => {

@@ -62,11 +62,16 @@ const makeDb = ({ users = [], identities = [], failOn = null } = {}) => {
       return { rows: [], rowCount: 1 };
     }
     if (/^INSERT INTO users/.test(text.trim())) {
-      const [name, email, phone, profile_image, auth_provider] = params;
+      const [name, email, phone, profile_image, auth_provider, email_verified] = params;
       if (email && state.users.some((u) => u.email === email)) throw uniqueViolation('users_email_key');
-      const u = { id: `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`, name, email, phone, profile_image, auth_provider, password_hash: null };
+      const u = { id: `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`, name, email, phone, profile_image, auth_provider, password_hash: null, email_verified };
       state.users.push(u);
       return { rows: [pick(u)], rowCount: 1 };
+    }
+    if (/^UPDATE users SET email_verified = true WHERE id = \$1 AND email_verified = false$/.test(text.trim())) {
+      const u = state.users.find((x) => x.id === params[0] && x.email_verified !== true);
+      if (u) u.email_verified = true;
+      return { rows: [], rowCount: u ? 1 : 0 };
     }
     if (/^INSERT INTO user_preferences/.test(text.trim())) {
       state.prefs.push(params[0]);
@@ -458,6 +463,151 @@ describe('Firebase sign-in: accounts', () => {
     quiet(t);
     const h = build({ db: makeDb({ failOn: /FROM user_identities/ }), tokens: { g: claims('google.com') } });
     assert.equal((await call(h.handlers.googleLogin, { idToken: 'g' })).statusCode, 500);
+  });
+});
+
+describe('Firebase sign-in: the confirmed phone number', () => {
+  // The only number a trusted contact's emergency is matched on
+  // (services/contactAlertService.js), so it is taken from the token on every
+  // phone sign-in, never from the request.
+  const buildRecording = ({ db = makeDb(), tokens = {}, record } = {}) => {
+    const recorded = [];
+    const handlers = buildAuthHandlers({
+      query: db.query,
+      getClient: db.getClient,
+      getAuth: () => makeAuth(tokens),
+      startSession: async ({ user }) => `jwt-for-${user.id}`,
+      isEmailConfigured: () => true,
+      sendPasswordResetCode: async () => {},
+      recordVerifiedPhone: record || (async (userId, phone) => { recorded.push({ userId, phone }); return true; }),
+    });
+    return { handlers, db, recorded };
+  };
+
+  test('a new phone account records the number from the token, not the body', async () => {
+    const h = buildRecording({ tokens: { p: claims('phone', { phone_number: ' +18765550140 ' }) } });
+    const res = await call(h.handlers.phoneLogin, { idToken: 'p', name: 'Ana Lee', phone: '+18765559999' });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(h.recorded, [{ userId: res.body.data.user.id, phone: '+18765550140' }]);
+  });
+
+  test('a returning phone sign-in records it again, so a moved number follows its owner', async () => {
+    const db = makeDb({
+      users: [{ id: EXISTING.id, name: 'Asha Brown', phone: '+18765550141', auth_provider: 'phone' }],
+      identities: [{ firebase_uid: 'uid-phone', user_id: EXISTING.id, provider: 'phone' }],
+    });
+    const h = buildRecording({ db, tokens: { p: claims('phone', { phone_number: '+18765550141' }) } });
+    const res = await call(h.handlers.phoneLogin, { idToken: 'p' });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(h.recorded, [{ userId: EXISTING.id, phone: '+18765550141' }]);
+  });
+
+  test('a suspended account is refused and nothing is recorded for it', async () => {
+    const db = makeDb({
+      users: [{ id: EXISTING.id, name: 'Asha Brown', auth_provider: 'phone', status: 'suspended' }],
+      identities: [{ firebase_uid: 'uid-phone', user_id: EXISTING.id, provider: 'phone' }],
+    });
+    const h = buildRecording({ db, tokens: { p: claims('phone', { phone_number: '+18765550142' }) } });
+    assert.equal((await call(h.handlers.phoneLogin, { idToken: 'p' })).statusCode, 403);
+    assert.deepEqual(h.recorded, []);
+  });
+
+  test('Google and Facebook sign-ins record nothing, whatever the token carries', async () => {
+    const h = buildRecording({ tokens: {
+      g: claims('google.com', { email: 'g@example.com', email_verified: true, name: 'G Person', phone_number: '+18765550143' }),
+      f: claims('facebook.com', { name: 'F Person', phone_number: '+18765550144' }),
+    } });
+    assert.equal((await call(h.handlers.googleLogin, { idToken: 'g' })).statusCode, 200);
+    assert.equal((await call(h.handlers.facebookLogin, { idToken: 'f' })).statusCode, 200);
+    assert.deepEqual(h.recorded, []);
+  });
+
+  test('a failure to record is logged without the number and does not fail the sign-in', async (t) => {
+    const logged = [];
+    t.mock.method(console, 'error', (...a) => logged.push(a.map(String).join(' ')));
+    t.mock.method(console, 'warn', (...a) => logged.push(a.map(String).join(' ')));
+    const h = buildRecording({
+      tokens: { p: claims('phone', { phone_number: '+18765550145' }) },
+      record: async () => { throw new Error('db down'); },
+    });
+    const res = await call(h.handlers.phoneLogin, { idToken: 'p', name: 'Ana Lee' });
+    assert.equal(res.statusCode, 200);
+    assert.equal(logged.length, 1);
+    assert.match(logged[0], /Recording the confirmed phone number failed/);
+    assert.doesNotMatch(logged.join('\n'), /8765550145/);
+  });
+
+  test('a number the store refuses is logged without the number, and the sign-in goes on', async (t) => {
+    const logged = [];
+    t.mock.method(console, 'warn', (...a) => logged.push(a.map(String).join(' ')));
+    const h = buildRecording({
+      tokens: { p: claims('phone', { phone_number: '+18765550146' }) },
+      record: async () => false,
+    });
+    assert.equal((await call(h.handlers.phoneLogin, { idToken: 'p', name: 'Ana Lee' })).statusCode, 200);
+    assert.equal(logged.length, 1);
+    assert.doesNotMatch(logged[0], /8765550146/);
+  });
+});
+
+describe('Firebase sign-in: whether the email is verified (users.email_verified)', () => {
+  const returning = (extra = {}) => makeDb({
+    users: [{ id: EXISTING.id, name: 'Asha Brown', email: 'Asha@Example.com', auth_provider: 'google', email_verified: false, ...extra }],
+    identities: [{ firebase_uid: 'uid-google.com', user_id: EXISTING.id, provider: 'google' }],
+  });
+  const verifiedRows = (db) => db.log.filter((l) => /SET email_verified = true/.test(l.text));
+
+  test('a new account is verified exactly when it stores an email', async () => {
+    let h = build({ tokens: { g: claims('google.com', { email: 'new@example.com', email_verified: true, name: 'Kemar' }) } });
+    await call(h.handlers.googleLogin, { idToken: 'g' });
+    assert.equal(h.db.state.users[0].email_verified, true);
+
+    h = build({ tokens: { f: claims('facebook.com', { email: 'new@example.com', email_verified: false, name: 'Kemar' }) } });
+    await call(h.handlers.facebookLogin, { idToken: 'f' });
+    assert.equal(h.db.state.users[0].email, null);
+    assert.equal(h.db.state.users[0].email_verified, false);
+
+    h = build({ tokens: { p: claims('phone', { phone_number: '+18765550150', email: 'p@example.com', email_verified: true }) } });
+    await call(h.handlers.phoneLogin, { idToken: 'p', name: 'Ana' });
+    assert.equal(h.db.state.users[0].email_verified, false, 'a phone account has no email to verify');
+  });
+
+  test('a returning sign-in whose token verifies the account\'s own address marks it, in any case', async () => {
+    const h = build({ db: returning(), tokens: { g: claims('google.com', { email: 'asha@example.com', email_verified: true }) } });
+    const res = await call(h.handlers.googleLogin, { idToken: 'g' });
+    assert.equal(res.statusCode, 200);
+    assert.equal(h.db.state.users[0].email_verified, true);
+    assert.deepEqual(verifiedRows(h.db).map((l) => l.params), [[EXISTING.id]]);
+  });
+
+  test('an unverified token, another address, no address or a suspended account marks nothing', async () => {
+    for (const [extra, token] of [
+      [{}, { email: 'asha@example.com', email_verified: false }],
+      [{}, { email: 'asha@example.com' }],
+      [{}, { email: 'someone.else@example.com', email_verified: true }],
+      [{ email: null }, { email: 'asha@example.com', email_verified: true }],
+      [{ status: 'suspended' }, { email: 'asha@example.com', email_verified: true }],
+    ]) {
+      const h = build({ db: returning(extra), tokens: { g: claims('google.com', token) } });
+      await call(h.handlers.googleLogin, { idToken: 'g' });
+      assert.equal(verifiedRows(h.db).length, 0, JSON.stringify([extra, token]));
+      assert.equal(h.db.state.users[0].email_verified, false);
+    }
+  });
+
+  test('a failure to record it is logged and does not fail the sign-in', async (t) => {
+    const logged = [];
+    t.mock.method(console, 'error', (...a) => logged.push(a.map(String).join(' ')));
+    const db = returning();
+    const query = db.query;
+    db.query = async (text, params) => {
+      if (/SET email_verified = true/.test(text)) throw new Error('db down');
+      return query(text, params);
+    };
+    const h = build({ db, tokens: { g: claims('google.com', { email: 'asha@example.com', email_verified: true }) } });
+    const res = await call(h.handlers.googleLogin, { idToken: 'g' });
+    assert.equal(res.statusCode, 200);
+    assert.ok(logged.some((l) => l.includes(`Recording the verified email failed for user ${EXISTING.id}`)));
   });
 });
 

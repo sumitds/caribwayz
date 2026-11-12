@@ -4,6 +4,7 @@ const { resolveResponderAccess } = require('../middleware/auth');
 const { success, created, error, notFound, forbidden } = require('../utils/response');
 const { displayName } = require('../utils/displayName');
 const { notify } = require('../services/notificationService');
+const { notifyContactsOfAlert, notifyContactsResolved } = require('../services/contactAlertService');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -103,14 +104,19 @@ const triggerEmergency = async (req, res) => {
 
     const alert = result.rows[0];
 
-    const notified = await notifyResponders(alert);
+    // Neither throws; the two audiences are told at the same time.
+    const [notified, contactsNotified] = await Promise.all([
+      notifyResponders(alert),
+      notifyContactsOfAlert(alert),
+    ]);
 
     // responders_notified lets the client tell the user whether anyone was
     // actually reachable, instead of implying help is coming when no responder
     // account exists in their territory yet. -1 means delivery itself failed.
+    // contacts_notified is the same for trusted contacts who use CaribWayz.
     return created(
       res,
-      { alert, responders_notified: notified },
+      { alert, responders_notified: notified, contacts_notified: contactsNotified },
       'Emergency alert triggered'
     );
   } catch (err) {
@@ -334,16 +340,69 @@ const resolveEmergency = async (req, res) => {
       return success(res, { alert: current }, 'Emergency already resolved');
     }
 
+    // Only an open alert is closed, so two presses at once close it, and tell
+    // the trusted contacts, exactly once.
     const result = await query(
       `UPDATE emergency_alerts SET status = 'resolved', resolved_at = NOW(), resolved_by = $2
-       WHERE id = $1 RETURNING *`,
+       WHERE id = $1 AND status = 'active' RETURNING *`,
       [id, req.user.id]
     );
+    if (result.rowCount === 0) {
+      const latest = await query('SELECT * FROM emergency_alerts WHERE id = $1', [id]);
+      if (latest.rows.length === 0) return notFound(res, 'Emergency alert not found');
+      return success(res, { alert: latest.rows[0] }, 'Emergency already resolved');
+    }
 
-    return success(res, { alert: result.rows[0] }, 'Emergency resolved');
+    const alert = result.rows[0];
+    // Never throws: the alert is resolved whether or not the contacts hear it.
+    await notifyContactsResolved(alert, { bySender: isOwner });
+
+    return success(res, { alert }, 'Emergency resolved');
   } catch (err) {
     console.error('Resolve emergency error:', err);
     return error(res, 'Failed to resolve emergency', 500);
+  }
+};
+
+/**
+ * The sender's phone reports where they are now, while their alert is open,
+ * for the trusted contacts following it. Only the person who raised the alert
+ * may move it; anyone else is told it does not exist. A resolved alert is
+ * refused with 409, which tells the phone to stop sending.
+ */
+const updateAlertLocation = async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (!UUID_PATTERN.test(String(id))) return error(res, 'Alert id must be a valid UUID', 400);
+
+    const lat = parseFloat(req.body && req.body.latitude);
+    const lng = parseFloat(req.body && req.body.longitude);
+    if (!Number.isFinite(lat) || Math.abs(lat) > 90 ||
+        !Number.isFinite(lng) || Math.abs(lng) > 180) {
+      return error(res, 'Latitude and longitude must be a valid coordinate', 400);
+    }
+
+    const updated = await query(
+      `UPDATE emergency_alerts
+          SET live_latitude = $3, live_longitude = $4, live_located_at = NOW()
+        WHERE id = $1 AND user_id = $2 AND status = 'active'
+        RETURNING id, status, live_located_at`,
+      [id, req.user.id, lat, lng]
+    );
+    if (updated.rowCount === 1) {
+      const row = updated.rows[0];
+      return success(res, { alert: { id: row.id, status: row.status, live_located_at: row.live_located_at } }, 'Location updated');
+    }
+
+    const existing = await query(
+      'SELECT id, status FROM emergency_alerts WHERE id = $1 AND user_id = $2',
+      [id, req.user.id]
+    );
+    if (existing.rows.length === 0) return notFound(res, 'Emergency alert not found');
+    return conflict(res, 'This emergency is already resolved', { id: existing.rows[0].id, status: existing.rows[0].status });
+  } catch (err) {
+    console.error(`Update emergency location error (alert ${id}):`, err.message);
+    return error(res, 'Failed to update the emergency location', 500);
   }
 };
 
@@ -457,6 +516,7 @@ module.exports = {
   resolveEmergency,
   acknowledgeEmergency,
   releaseEmergency,
+  updateAlertLocation,
   withDeskState,
   EMERGENCY_TYPES,
 };

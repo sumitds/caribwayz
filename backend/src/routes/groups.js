@@ -6,7 +6,8 @@ const { perUser } = require('../middleware/rateLimit');
 const { createGroup, joinGroup, getGroupDetails, leaveGroup, updateLocation, inviteToGroup, getGroupsByUser } = require('../controllers/groupController');
 // Validation for these lives in the controller: the mobile client expects 400
 // with a readable message, while the shared `validate` middleware answers 422.
-const { sendSos, checkIn, deleteGroup } = require('../controllers/groupEventController');
+const { sendSos, checkIn, deleteGroup, reportStatus } = require('../controllers/groupEventController');
+const { listInvites, acceptInvite, declineInvite } = require('../controllers/groupInviteController');
 
 router.use(authenticate);
 
@@ -25,6 +26,11 @@ router.post(
 );
 
 router.get('/user/:user_id', getGroupsByUser);
+// Invites inside the app (migration 028). Above '/:id', which would otherwise
+// take "invites" for a group id.
+router.get('/invites', listInvites);
+router.post('/invites/:inviteId/accept', acceptInvite);
+router.post('/invites/:inviteId/decline', declineInvite);
 router.get('/:id', getGroupDetails);
 router.delete('/:id', deleteGroup);
 router.post('/:id/leave', leaveGroup);
@@ -36,6 +42,15 @@ const GROUP_EVENT_WINDOW_MS = 10 * 60 * 1000;
 const perGroupMember = (message) => perUser(GROUP_EVENT_LIMIT, GROUP_EVENT_WINDOW_MS, message, (req) => `group:${req.params.id}`);
 router.post('/:id/sos', perGroupMember('Too many SOS alerts to this group. Please wait a few minutes before sending another.'), sendSos);
 router.post('/:id/check-in', perGroupMember('Too many check-ins to this group. Please wait a few minutes before checking in again.'), checkIn);
+// A member's app reports their own status (arrived, stopped, running late,
+// left the drive). The controller already shares each status at most once per
+// window; this caps the requests themselves, for an app stuck in a loop.
+const GROUP_STATUS_LIMIT = 30;
+router.post(
+  '/:id/status',
+  perUser(GROUP_STATUS_LIMIT, GROUP_EVENT_WINDOW_MS, 'Too many status updates to this group. Please wait a few minutes.', (req) => `group-status:${req.params.id}`),
+  reportStatus
+);
 // Each address on an invite is an email to someone else's inbox, so one
 // invite names at most MAX_INVITE_ADDRESSES and each account has a budget.
 const MAX_INVITE_ADDRESSES = 10;
