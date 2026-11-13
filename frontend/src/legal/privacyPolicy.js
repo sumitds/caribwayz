@@ -8,9 +8,9 @@ const privacyPolicy = `# CaribWayz Privacy Policy
 
 > DRAFT - pending legal review. This text has not yet been approved by a lawyer and may change before it takes effect.
 
-Version: 0.4 (draft)
+Version: 0.5 (draft)
 
-Last updated: 12 November 2026
+Last updated: 13 November 2026
 
 ## 1. Who we are
 
@@ -18,7 +18,7 @@ CaribWayz is a navigation and road-safety app for Jamaica and the wider Caribbea
 
 We decide how and why your personal information is used, so we are the "data controller" for it under Jamaica's Data Protection Act, 2020 and similar laws elsewhere in the Caribbean.
 
-You can contact us about anything in this policy at info@caribwayz.com. Our Data Protection Officer is [Data Protection Officer name], who you can reach at [Data Protection Officer email].
+You can contact us about anything in this policy at info@caribwayz.com. Our Data Protection Officer is Christina Baker, who you can reach at the same address.
 
 ## 2. What this policy covers
 
@@ -287,7 +287,7 @@ CARIBWAYZ
 
 Email: info@caribwayz.com
 
-Data Protection Officer: [Data Protection Officer name], [Data Protection Officer email]
+Data Protection Officer: Christina Baker, info@caribwayz.com
 `;
 
 export default privacyPolicy;
