@@ -9,6 +9,7 @@ const {
   firebaseSignInLimiter, loginLimiter, forgotPasswordLimiter, resetVerifyLimiter, twoFactorVerifyLimiter,
 } = require('../middleware/rateLimits');
 const { isPlaceholderName } = require('../utils/displayName');
+const { FIELDS } = require('../services/legalAcceptance');
 
 /** Password rules for any field that sets a password: /register and a reset. */
 const passwordRules = (field) =>
@@ -19,8 +20,24 @@ const passwordRules = (field) =>
     .matches(/[^A-Za-z0-9]/).withMessage('Password must contain at least 1 special symbol');
 
 /**
- * Body of the Firebase sign-in routes. Everything except the token and an
- * optional name is ignored: email, name and photo come from the verified token.
+ * The versions of the Terms of Service and Privacy Policy a new account
+ * accepted. Optional here, and null allowed: whether they are present, given
+ * and current is decided by services/legalAcceptance.js, which answers 400
+ * with TERMS_NOT_ACCEPTED or TERMS_VERSION_OUTDATED. These rules only refuse
+ * values that cannot be a version at all.
+ */
+const acceptanceRules = Object.values(FIELDS).map((field) =>
+  body(field)
+    .optional({ values: 'null' })
+    .isString().withMessage(`${field} must be text`)
+    .bail()
+    .isLength({ max: 32 }).withMessage(`${field} must be at most 32 characters`)
+);
+
+/**
+ * Body of the Firebase sign-in routes. Everything except the token, an
+ * optional name and the acceptance fields is ignored: email, name and photo
+ * come from the verified token.
  */
 const firebaseSignInRules = [
   body('idToken')
@@ -35,6 +52,7 @@ const firebaseSignInRules = [
     .isString().withMessage('Name must be text')
     .bail()
     .isLength({ max: 255 }).withMessage('Name must be at most 255 characters'),
+  ...acceptanceRules,
 ];
 
 router.post(
@@ -52,6 +70,7 @@ router.post(
       .isIn(['CaribDrivers', 'CaribOfficials'])
       .withMessage('user_type must be CaribDrivers or CaribOfficials'),
     passwordRules('password'),
+    ...acceptanceRules,
   ],
   validate,
   register

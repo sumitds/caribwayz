@@ -107,6 +107,34 @@ describe('contactAlertView', () => {
     assert.equal(contactAlertView({ ...base, status: 'resolved', resolved_by: null }).resolved_by_sender, false);
   });
 
+  test('desk_status as stored; resolved_at keeps meaning "closed at" for the app 1.0.11', () => {
+    const at = new Date('2026-11-12T10:30:00Z');
+    const addressed = contactAlertView({ ...base, status: 'resolved', desk_status: 'addressed', addressed_at: at });
+    assert.equal(addressed.status, 'resolved');
+    assert.equal(addressed.desk_status, 'addressed');
+    assert.equal(addressed.closed_at, '2026-11-12T10:30:00.000Z');
+    assert.equal(addressed.resolved_at, '2026-11-12T10:30:00.000Z');
+    assert.equal(addressed.resolved_by_sender, false);
+    assert.equal(addressed.location, null);
+
+    const cancelled = contactAlertView({ ...base, status: 'resolved', desk_status: 'cancelled', cancelled_at: at });
+    assert.equal(cancelled.desk_status, 'cancelled');
+    assert.equal(cancelled.resolved_by_sender, true);
+    assert.equal(cancelled.closed_at, '2026-11-12T10:30:00.000Z');
+
+    const acknowledged = contactAlertView({ ...base, desk_status: 'acknowledged', acknowledged_at: at });
+    assert.equal(acknowledged.status, 'active');
+    assert.equal(acknowledged.desk_status, 'acknowledged');
+    assert.equal(acknowledged.closed_at, null);
+    assert.ok(acknowledged.location);
+  });
+
+  test('rows from before migration 033: the sender closing it is cancelled, anyone else resolved', () => {
+    assert.equal(contactAlertView({ ...base, status: 'resolved', resolved_by: SENDER }).desk_status, 'cancelled');
+    assert.equal(contactAlertView({ ...base, status: 'resolved', resolved_by: BEN }).desk_status, 'resolved');
+    assert.equal(contactAlertView(base).desk_status, 'pending');
+  });
+
   test('a sender with no name or no phone', () => {
     for (const name of [null, '', '  ', 'default']) {
       assert.equal(contactAlertView({ ...base, sender_name: name }).sender.name, UNNAMED_SENDER);
@@ -318,39 +346,59 @@ describe('notifyContactsOfAlert', () => {
   });
 });
 
-describe('notifyContactsResolved', () => {
+describe('notifyContactsClosed', () => {
   const alert = { id: ALERT, user_id: SENDER };
   const recorded = () => fakeQuery([[/FROM emergency_alert_contacts c/, rows([
     { contact_user_id: ANA, sender_name: 'Ana Lee' },
     { contact_user_id: BEN, sender_name: 'Ana Lee' },
   ])]]);
 
-  test('closed by the sender: they are safe, and sharing has stopped', async () => {
+  test('cancelled by the sender: says Cancelled, and sharing has stopped', async () => {
     const db = recorded();
     const n = fakeNotify(2);
-    assert.equal(await buildContactAlertService({ query: db.query, notify: n.notify }).notifyContactsResolved(alert, { bySender: true }), 2);
+    assert.equal(await buildContactAlertService({ query: db.query, notify: n.notify }).notifyContactsClosed(alert, { deskStatus: 'cancelled' }), 2);
     const { userIds, payload } = n.sent[0];
     assert.deepEqual(userIds, [ANA, BEN]);
-    assert.equal(payload.title, 'Ana Lee is safe');
+    assert.equal(payload.title, 'Ana Lee cancelled their emergency alert');
     assert.match(payload.message, /marked themselves safe and cancelled/);
+    assert.match(payload.message, /Emergency status: Cancelled\./);
     assert.match(payload.message, /no longer shared/);
-    assert.deepEqual(payload.data, { kind: 'contact_alert_resolved' });
+    assert.doesNotMatch(payload.message, /resolved/i);
+    assert.deepEqual(payload.data, { kind: 'contact_alert_resolved', desk_status: 'cancelled' },
+      'the kind the app 1.0.11 opens the alert for, and the status');
     assert.equal(payload.reference_id, ALERT);
     assert.equal(payload.category, 'emergency');
     assert.match(db.calls[0].text, /NOT EXISTS \(SELECT 1 FROM user_blocks/, 'a pair blocked since is not told');
   });
 
-  test('closed by the desk: says so, and does not claim the sender is safe', async () => {
+  test('addressed by the desk: says Addressed, what it does not mean, and does not claim the sender is safe', async () => {
     const n = fakeNotify(2);
-    await buildContactAlertService({ query: recorded().query, notify: n.notify }).notifyContactsResolved(alert, { bySender: false });
-    assert.equal(n.sent[0].payload.title, "Ana Lee's emergency was closed");
-    assert.doesNotMatch(n.sent[0].payload.message, /safe/);
+    await buildContactAlertService({ query: recorded().query, notify: n.notify }).notifyContactsClosed(alert, { deskStatus: 'addressed' });
+    const { payload } = n.sent[0];
+    assert.equal(payload.title, "Ana Lee's emergency was marked Addressed");
+    assert.match(payload.message, /Emergency status: Addressed\./);
+    assert.match(payload.message, /does not confirm that help has arrived or that the emergency is over/);
+    assert.doesNotMatch(payload.message, /safe/);
+    assert.doesNotMatch(payload.message, /resolved/i);
+    assert.deepEqual(payload.data, { kind: 'contact_alert_resolved', desk_status: 'addressed' });
+  });
+
+  test('any other status is refused, logged, and sends nothing', async (t) => {
+    const logged = capture(t);
+    for (const deskStatus of ['resolved', 'pending', 'acknowledged', undefined]) {
+      const db = recorded();
+      const n = fakeNotify(2);
+      assert.equal(await buildContactAlertService({ query: db.query, notify: n.notify }).notifyContactsClosed(alert, { deskStatus }), -1, String(deskStatus));
+      assert.equal(n.sent.length, 0);
+      assert.equal(db.calls.length, 0);
+    }
+    assert.equal(logged.length, 4);
   });
 
   test('nobody was told about it: 0, nothing sent', async () => {
     const db = fakeQuery([[/FROM emergency_alert_contacts c/, rows([])]]);
     const n = fakeNotify();
-    assert.equal(await buildContactAlertService({ query: db.query, notify: n.notify }).notifyContactsResolved(alert, { bySender: true }), 0);
+    assert.equal(await buildContactAlertService({ query: db.query, notify: n.notify }).notifyContactsClosed(alert, { deskStatus: 'cancelled' }), 0);
     assert.equal(n.sent.length, 0);
   });
 
@@ -358,7 +406,7 @@ describe('notifyContactsResolved', () => {
     const logged = capture(t);
     const db = fakeQuery([[/FROM emergency_alert_contacts c/, new Error('db down')]]);
     const n = fakeNotify();
-    assert.equal(await buildContactAlertService({ query: db.query, notify: n.notify }).notifyContactsResolved(alert, { bySender: true }), -1);
+    assert.equal(await buildContactAlertService({ query: db.query, notify: n.notify }).notifyContactsClosed(alert, { deskStatus: 'cancelled' }), -1);
     assert.equal(n.sent.length, 0);
     assert.equal(logged.length, 1);
   });
@@ -733,7 +781,7 @@ describe('emergency contact alerts over HTTP against Postgres', { skip: !process
     assert.equal(stored.live_latitude, null);
   });
 
-  test('resolved by the sender: contacts are told once that they are safe, the position is gone, updates are refused', async () => {
+  test('cancelled by the sender (the old /resolve route): contacts are told once, the position is gone, updates are refused', async () => {
     const sender = await newSender([phone(2), phone(3)]);
     const { alert } = await raise(sender);
     await call(sender, 'PATCH', `/emergency/${alert.id}/location`, { latitude: 18.2, longitude: -76.6 });
@@ -743,13 +791,15 @@ describe('emergency contact alerts over HTTP against Postgres', { skip: !process
       call(sender, 'POST', `/emergency/${alert.id}/resolve`),
     ]);
     assert.deepEqual([a.status, b.status], [200, 200]);
-    const safe = (await q(`SELECT user_id FROM notifications WHERE reference_id = $1 AND title = 'Ana Lee is safe'`, [alert.id])).rows;
+    const safe = (await q(`SELECT user_id FROM notifications WHERE reference_id = $1 AND title = 'Ana Lee cancelled their emergency alert'`, [alert.id])).rows;
     assert.equal(safe.length, 2, 'each contact told once, though resolve was pressed twice');
 
     const view = (await call('ben', 'GET', `/emergency/contact-alerts/${alert.id}`)).body.data.alert;
     assert.equal(view.status, 'resolved');
+    assert.equal(view.desk_status, 'cancelled');
     assert.equal(view.location, null);
     assert.equal(view.resolved_by_sender, true);
+    assert.ok(view.closed_at);
     assert.ok(view.last_location_at);
 
     const late = await call(sender, 'PATCH', `/emergency/${alert.id}/location`, { latitude: 18.3, longitude: -76.5 });
@@ -759,7 +809,7 @@ describe('emergency contact alerts over HTTP against Postgres', { skip: !process
     assert.equal(parseFloat(stored.live_latitude), 18.2, 'nothing written after resolve');
   });
 
-  test('resolved by the desk: contacts are told the desk closed it', async () => {
+  test('addressed by the desk (the old /resolve route from a responder): contacts are told Addressed', async () => {
     const { alert } = await raise(await newSender([phone(2)]));
     await q(`UPDATE users SET is_responder = TRUE WHERE id = $1`, [users.stranger]);
     try {
@@ -768,8 +818,13 @@ describe('emergency contact alerts over HTTP against Postgres', { skip: !process
       await q(`UPDATE users SET is_responder = FALSE WHERE id = $1`, [users.stranger]);
     }
     const titles = (await noticesFor('ben', alert.id)).map((r) => r.title);
-    assert.deepEqual(titles, ['EMERGENCY: Ana Lee needs help', "Ana Lee's emergency was closed"]);
-    assert.equal((await call('ben', 'GET', `/emergency/contact-alerts/${alert.id}`)).body.data.alert.resolved_by_sender, false);
+    assert.deepEqual(titles, ['EMERGENCY: Ana Lee needs help', "Ana Lee's emergency was marked Addressed"]);
+    const view = (await call('ben', 'GET', `/emergency/contact-alerts/${alert.id}`)).body.data.alert;
+    assert.equal(view.resolved_by_sender, false);
+    assert.equal(view.desk_status, 'addressed');
+    const listed = (await call('ben', 'GET', '/emergency/contact-alerts')).body.data.alerts.find((a) => a.id === alert.id);
+    assert.ok(listed, 'an alert addressed in the last day stays in the list');
+    assert.equal(listed.desk_status, 'addressed');
   });
 
   test('location updates are rate limited per account', async () => {

@@ -4,7 +4,10 @@ const { resolveResponderAccess } = require('../middleware/auth');
 const { success, created, error, notFound, forbidden } = require('../utils/response');
 const { displayName } = require('../utils/displayName');
 const { notify } = require('../services/notificationService');
-const { notifyContactsOfAlert, notifyContactsResolved } = require('../services/contactAlertService');
+const { notifyContactsOfAlert, notifyContactsClosed } = require('../services/contactAlertService');
+const {
+  DESK_STATUS, deskStatusOf, isOpenDeskStatus, closedAtOf, alreadyClosedMessage, evaluateTransition,
+} = require('../services/emergencyStatus');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,7 +24,8 @@ const conflict = (res, message, alert) =>
  */
 const EMERGENCY_TYPES = ['fire', 'medical', 'accident', 'breakdown', 'crime', 'other'];
 
-const ALERT_STATUSES = ['active', 'resolved'];
+/** The feed's status filter: open alerts, or closed ones ('resolved' is the older name for closed). */
+const LIST_STATUSES = ['active', 'closed', 'resolved'];
 
 /**
  * Hard ceiling on rows pulled from the table for one feed request.
@@ -126,18 +130,27 @@ const triggerEmergency = async (req, res) => {
 };
 
 /**
- * Adds desk_state ('new' | 'acknowledged' | 'resolved') and readable operator
- * names. acknowledged_at is the flag: a deleted operator account leaves the
- * alert taken, by "a former operator".
+ * Adds desk_status (services/emergencyStatus.js), closed_at, and readable
+ * operator names.
+ *
+ * desk_status is the Emergency Desk Disclaimer's status: pending,
+ * acknowledged, addressed or cancelled (resolved only on alerts the desk
+ * closed before migration 033). status stays 'active' or 'resolved', the
+ * open/closed value the app 1.0.11 reads. acknowledged_at, not
+ * acknowledged_by, says the alert was taken: a deleted operator account
+ * leaves it taken, by "a former operator".
  */
-const withDeskState = (row) => {
-  const deskState = row.status === 'resolved'
-    ? 'resolved'
-    : row.acknowledged_at ? 'acknowledged' : 'new';
-  const out = { ...row, desk_state: deskState };
+const withDeskStatus = (row) => {
+  const deskStatus = deskStatusOf(row);
+  const out = { ...row, desk_status: deskStatus, closed_at: closedAtOf(row) };
   if ('acknowledged_by_name' in row) {
     out.acknowledged_by_name = row.acknowledged_at
       ? displayName(row.acknowledged_by_name, row.acknowledged_by ? 'An operator' : 'A former operator')
+      : null;
+  }
+  if ('addressed_by_name' in row) {
+    out.addressed_by_name = row.addressed_at
+      ? displayName(row.addressed_by_name, row.addressed_by ? 'An operator' : 'A former operator')
       : null;
   }
   if ('resolved_by_name' in row) {
@@ -147,7 +160,22 @@ const withDeskState = (row) => {
 };
 
 /**
- * The responder feed: active emergency alerts, nearest first.
+ * [alert] as the person who raised it sees it: the desk status and its times,
+ * not which operator did what. Operator identities are staff data.
+ */
+const OPERATOR_FIELDS = [
+  'acknowledged_by', 'acknowledged_by_name',
+  'addressed_by', 'addressed_by_name',
+  'resolved_by', 'resolved_by_name',
+];
+const ownerView = (alert) => {
+  const out = { ...alert };
+  for (const field of OPERATOR_FIELDS) delete out[field];
+  return out;
+};
+
+/**
+ * The responder feed: emergency alerts, nearest first.
  *
  * Gated by requireResponder. These rows are live locations of people in
  * trouble, so this must never be readable by an ordinary driver account.
@@ -156,24 +184,28 @@ const withDeskState = (row) => {
  *   lat, lng  optional; when both are given, results are ordered by distance
  *             from that point and annotated with distance_km and eta_minutes
  *   radius    optional km limit; ignored unless lat and lng are both present
- *   status    active (default); resolved is admin-only, because the resolved
- *             set is a historical archive of where people have been
+ *   status    active (default): open alerts, desk_status pending or
+ *             acknowledged. closed: addressed, cancelled and resolved alerts,
+ *             admin-only, because that set is a historical archive of where
+ *             people have been. resolved is accepted as the older name for
+ *             closed; each row's desk_status says how it was closed.
  *   limit     1-200, default 100, applied after the distance sort
  */
 const listEmergencies = async (req, res) => {
   try {
     const { lat, lng, radius, status = 'active' } = req.query;
 
-    if (!ALERT_STATUSES.includes(status)) {
+    if (!LIST_STATUSES.includes(status)) {
       return error(
         res,
-        `Invalid status. Must be one of: ${ALERT_STATUSES.join(', ')}`,
+        `Invalid status. Must be one of: ${LIST_STATUSES.join(', ')}`,
         400
       );
     }
 
-    if (status === 'resolved' && req.user.role !== 'admin') {
-      return forbidden(res, 'Only an administrator can list resolved alerts');
+    const wantsOpen = status === 'active';
+    if (!wantsOpen && !isAdminAccess(req.responderAccess)) {
+      return forbidden(res, 'Only an administrator can list closed alerts');
     }
 
     const parsedLimit = parseInt(req.query.limit, 10);
@@ -185,9 +217,11 @@ const listEmergencies = async (req, res) => {
     // party who has not raised an emergency, the responder does not need it to
     // attend the scene, and the client never read it.
     const result = await query(
-      `SELECT a.id, a.type, a.latitude, a.longitude, a.description, a.status,
+      `SELECT a.id, a.type, a.latitude, a.longitude, a.description, a.status, a.desk_status,
               a.created_at, a.resolved_at,
               a.acknowledged_at, a.acknowledged_by, op.name AS acknowledged_by_name,
+              a.addressed_at, a.addressed_by, ad.name AS addressed_by_name,
+              a.cancelled_at,
               a.resolved_by, rb.name AS resolved_by_name,
               u.id   AS reporter_id,
               u.name AS reporter_name,
@@ -195,15 +229,16 @@ const listEmergencies = async (req, res) => {
          FROM emergency_alerts a
          JOIN users u ON u.id = a.user_id
          LEFT JOIN users op ON op.id = a.acknowledged_by
+         LEFT JOIN users ad ON ad.id = a.addressed_by
          LEFT JOIN users rb ON rb.id = a.resolved_by
         WHERE a.status = $1
         ORDER BY a.created_at DESC
         LIMIT $2`,
-      [status, MAX_CANDIDATE_ALERTS]
+      [wantsOpen ? 'active' : 'resolved', MAX_CANDIDATE_ALERTS]
     );
 
     let alerts = result.rows.map((row) => ({
-      ...withDeskState(row),
+      ...withDeskStatus(row),
       // Postgres returns DECIMAL as a string; the client parses these as
       // coordinates and must not receive "18.01790000".
       latitude: parseFloat(row.latitude),
@@ -253,22 +288,34 @@ const listEmergencies = async (req, res) => {
 };
 
 /**
- * Whether the requesting user may act on an alert they do not own.
+ * The requesting user's responder access, or null when they have none.
  *
  * Delegates to the same check the feed middleware uses, so a change to who
  * counts as a responder cannot apply to the list endpoint while leaving the
  * per-id endpoints open.
  */
-const canActAsResponder = async (req) => {
+const responderAccessOf = async (req) => {
   try {
     const access = await resolveResponderAccess(req.user.id);
-    return access.allowed === true;
+    return access.allowed === true ? access : null;
   } catch (err) {
     console.error('Responder check error:', err);
     // Fail closed.
-    return false;
+    return null;
   }
 };
+
+/** Whether the requesting user may act on an alert they do not own. */
+const canActAsResponder = async (req) => (await responderAccessOf(req)) !== null;
+
+/**
+ * Whether [access] (resolveResponderAccess, as requireResponder attaches it
+ * to req.responderAccess) is an administrator's. The role is the one stored
+ * now, never the token's claim, which outlives a removed role.
+ */
+const isAdminAccess = (access) => Boolean(access && access.allowed === true && access.role === 'admin');
+
+const sameUser = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
 
 const getEmergencyStatus = async (req, res) => {
   try {
@@ -290,17 +337,13 @@ const getEmergencyStatus = async (req, res) => {
     // id; it is now restricted to the person who raised it and the responders
     // who are supposed to act on it.
     const isOwner = alert.user_id === req.user.id;
-    if (!isOwner && !(await canActAsResponder(req))) {
+    const isResponder = await canActAsResponder(req);
+    if (!isOwner && !isResponder) {
       return forbidden(res, 'Not authorized to view this alert');
     }
 
-    // The person who raised it learns that the desk has it, not which
-    // operator: operator identities are staff data.
-    const view = withDeskState(alert);
-    if (isOwner && !(await canActAsResponder(req))) {
-      delete view.acknowledged_by;
-      delete view.resolved_by;
-    }
+    // The person who raised it learns the desk status, not which operator.
+    const view = isResponder ? withDeskStatus(alert) : ownerView(withDeskStatus(alert));
 
     return success(res, {
       alert: {
@@ -315,60 +358,12 @@ const getEmergencyStatus = async (req, res) => {
   }
 };
 
-const resolveEmergency = async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!UUID_PATTERN.test(String(id))) return error(res, 'Alert id must be a valid UUID', 400);
-
-    const existing = await query(
-      'SELECT * FROM emergency_alerts WHERE id = $1',
-      [id]
-    );
-    if (existing.rows.length === 0) return notFound(res, 'Emergency alert not found');
-
-    const current = existing.rows[0];
-    const isOwner = current.user_id === req.user.id;
-
-    // A responder who has attended the scene can close the alert; otherwise an
-    // alert whose sender is unable to cancel it stays active forever.
-    if (!isOwner && !(await canActAsResponder(req))) {
-      return forbidden(res, 'Not authorized to resolve this alert');
-    }
-
-    if (current.status === 'resolved') {
-      // Idempotent: a double tap from a responder must not look like a failure.
-      return success(res, { alert: current }, 'Emergency already resolved');
-    }
-
-    // Only an open alert is closed, so two presses at once close it, and tell
-    // the trusted contacts, exactly once.
-    const result = await query(
-      `UPDATE emergency_alerts SET status = 'resolved', resolved_at = NOW(), resolved_by = $2
-       WHERE id = $1 AND status = 'active' RETURNING *`,
-      [id, req.user.id]
-    );
-    if (result.rowCount === 0) {
-      const latest = await query('SELECT * FROM emergency_alerts WHERE id = $1', [id]);
-      if (latest.rows.length === 0) return notFound(res, 'Emergency alert not found');
-      return success(res, { alert: latest.rows[0] }, 'Emergency already resolved');
-    }
-
-    const alert = result.rows[0];
-    // Never throws: the alert is resolved whether or not the contacts hear it.
-    await notifyContactsResolved(alert, { bySender: isOwner });
-
-    return success(res, { alert }, 'Emergency resolved');
-  } catch (err) {
-    console.error('Resolve emergency error:', err);
-    return error(res, 'Failed to resolve emergency', 500);
-  }
-};
-
 /**
  * The sender's phone reports where they are now, while their alert is open,
  * for the trusted contacts following it. Only the person who raised the alert
- * may move it; anyone else is told it does not exist. A resolved alert is
- * refused with 409, which tells the phone to stop sending.
+ * may move it; anyone else is told it does not exist. A closed alert
+ * (addressed, cancelled or resolved) is refused with 409, which tells the
+ * phone to stop sending.
  */
 const updateAlertLocation = async (req, res) => {
   const { id } = req.params;
@@ -386,20 +381,23 @@ const updateAlertLocation = async (req, res) => {
       `UPDATE emergency_alerts
           SET live_latitude = $3, live_longitude = $4, live_located_at = NOW()
         WHERE id = $1 AND user_id = $2 AND status = 'active'
-        RETURNING id, status, live_located_at`,
+        RETURNING id, status, desk_status, live_located_at`,
       [id, req.user.id, lat, lng]
     );
     if (updated.rowCount === 1) {
       const row = updated.rows[0];
-      return success(res, { alert: { id: row.id, status: row.status, live_located_at: row.live_located_at } }, 'Location updated');
+      return success(res, {
+        alert: { id: row.id, status: row.status, desk_status: row.desk_status, live_located_at: row.live_located_at },
+      }, 'Location updated');
     }
 
     const existing = await query(
-      'SELECT id, status FROM emergency_alerts WHERE id = $1 AND user_id = $2',
+      'SELECT id, status, desk_status FROM emergency_alerts WHERE id = $1 AND user_id = $2',
       [id, req.user.id]
     );
     if (existing.rows.length === 0) return notFound(res, 'Emergency alert not found');
-    return conflict(res, 'This emergency is already resolved', { id: existing.rows[0].id, status: existing.rows[0].status });
+    const row = existing.rows[0];
+    return conflict(res, alreadyClosedMessage(row.desk_status), { id: row.id, status: row.status, desk_status: row.desk_status });
   } catch (err) {
     console.error(`Update emergency location error (alert ${id}):`, err.message);
     return error(res, 'Failed to update the emergency location', 500);
@@ -409,41 +407,163 @@ const updateAlertLocation = async (req, res) => {
 /** One alert with the operator names the desk shows. */
 const loadDeskAlert = async (id) => {
   const result = await query(
-    `SELECT a.id, a.user_id, a.type, a.status, a.created_at, a.resolved_at,
+    `SELECT a.id, a.user_id, a.type, a.status, a.desk_status, a.created_at,
             a.acknowledged_at, a.acknowledged_by, op.name AS acknowledged_by_name,
-            a.resolved_by, rb.name AS resolved_by_name
+            a.addressed_at, a.addressed_by, ad.name AS addressed_by_name,
+            a.cancelled_at,
+            a.resolved_at, a.resolved_by, rb.name AS resolved_by_name
        FROM emergency_alerts a
        LEFT JOIN users op ON op.id = a.acknowledged_by
+       LEFT JOIN users ad ON ad.id = a.addressed_by
        LEFT JOIN users rb ON rb.id = a.resolved_by
       WHERE a.id = $1`,
     [id]
   );
-  return result.rows[0] ? withDeskState(result.rows[0]) : null;
+  return result.rows[0] ? withDeskStatus(result.rows[0]) : null;
 };
 
 /**
- * Tells the person who raised the alert that the desk has it. Like
- * notifyResponders, the row names no operator and carries no location.
- * Never throws.
+ * What the person who raised an alert is told when the desk changes its
+ * status. Each names the status in the disclaimer's word, and says what the
+ * status does not mean (disclaimer 5.4, 5.5, 5.9): an acknowledgment is not a
+ * dispatch, and addressed is not "help has arrived" or "it is over".
  */
-const notifyReporterAcknowledged = async (alert) => {
+const REPORTER_NOTICES = Object.freeze({
+  [DESK_STATUS.ACKNOWLEDGED]: Object.freeze({
+    title: 'Emergency status: Acknowledged',
+    message: 'The CaribWayz Emergency Desk has acknowledged your alert. This does not mean that an emergency responder has been dispatched. If you are in danger, call your local emergency number now (in Jamaica: 119 police, 110 fire and ambulance).',
+  }),
+  [DESK_STATUS.ADDRESSED]: Object.freeze({
+    title: 'Emergency status: Addressed',
+    message: 'The CaribWayz Emergency Desk has marked your alert as addressed. This does not confirm that help has arrived or that the emergency is over. If you still need help, call your local emergency number now (in Jamaica: 119 police, 110 fire and ambulance).',
+  }),
+});
+
+/**
+ * Tells the person who raised [alert] its new [deskStatus]. Like
+ * notifyResponders, the row names no operator and carries no location.
+ * Never throws. Returns whether the notification was written.
+ */
+const notifyReporter = async (alert, deskStatus) => {
+  const notice = REPORTER_NOTICES[deskStatus];
+  if (!notice) {
+    console.error(`Reporter notification for alert ${alert && alert.id}: no notice for status ${deskStatus}`);
+    return false;
+  }
   const written = await notify([alert.user_id], {
     type: 'emergency',
     category: 'emergency',
-    title: 'Your emergency has been seen',
-    message: 'The CaribWayz emergency desk has your alert and is arranging help. If you are in danger, call your local emergency number now.',
+    title: notice.title,
+    message: notice.message,
     reference_id: alert.id,
+    data: { desk_status: deskStatus },
   });
   return written > 0;
 };
 
-const sameUser = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
+/**
+ * The one statement each desk action runs. Each only matches an alert in a
+ * status the action may start from (services/emergencyStatus.js ACTIONS),
+ * with the same "who may" rule evaluateTransition applies, so two presses at
+ * once change the alert, and tell people, exactly once. status, the legacy
+ * open/closed flag, moves with desk_status (constraint in migration 033).
+ */
+const DESK_UPDATES = Object.freeze({
+  acknowledge: {
+    sql: `UPDATE emergency_alerts
+             SET desk_status = 'acknowledged', acknowledged_at = NOW(), acknowledged_by = $2
+           WHERE id = $1 AND desk_status = 'pending'
+           RETURNING id`,
+    withAdminFlag: false,
+  },
+  release: {
+    sql: `UPDATE emergency_alerts
+             SET desk_status = 'pending', acknowledged_at = NULL, acknowledged_by = NULL
+           WHERE id = $1 AND desk_status = 'acknowledged'
+             AND ($3::boolean OR acknowledged_by = $2)
+           RETURNING id`,
+    withAdminFlag: true,
+  },
+  address: {
+    sql: `UPDATE emergency_alerts
+             SET desk_status = 'addressed', status = 'resolved', addressed_at = NOW(), addressed_by = $2
+           WHERE id = $1
+             AND (desk_status = 'pending'
+                  OR (desk_status = 'acknowledged' AND ($3::boolean OR acknowledged_by = $2)))
+           RETURNING id`,
+    withAdminFlag: true,
+  },
+  cancel: {
+    sql: `UPDATE emergency_alerts
+             SET desk_status = 'cancelled', status = 'resolved', cancelled_at = NOW(), cancelled_by = $2
+           WHERE id = $1 AND user_id = $2 AND desk_status IN ('pending', 'acknowledged')
+           RETURNING id`,
+    withAdminFlag: false,
+  },
+});
 
 /**
- * An operator takes an alert. Gated by requireResponder.
+ * Who is acting, as evaluateTransition reads it. [access] is the
+ * resolveResponderAccess result read for this request, or null for someone
+ * acting only as the person who raised the alert.
+ */
+const actorFor = (req, access) => ({
+  id: req.user.id,
+  isAdmin: isAdminAccess(access),
+  isResponder: Boolean(access && access.allowed === true),
+});
+
+/**
+ * Runs desk [action] on alert [id] for [actor].
  *
- * The UPDATE only matches an open, untaken alert, so when two operators press
- * at once exactly one wins; the other gets 409 naming who has it. Pressing
+ * Returns { kind, alert, message }: kind is 'applied', 'unchanged',
+ * 'forbidden', 'conflict' or 'not_found'. When the statement changed
+ * nothing, the alert is read again and evaluateTransition says why, so the
+ * answer reflects the alert as it is now. Throws on a database error.
+ */
+const runDeskAction = async (action, id, actor) => {
+  const update = DESK_UPDATES[action];
+  // Every action but cancel is the desk's. The routes are gated by
+  // requireResponder; this keeps the statement from running if one is not.
+  if (action !== 'cancel' && !actor.isResponder && !actor.isAdmin) {
+    return { kind: 'forbidden', message: 'Responder access required' };
+  }
+  const params = update.withAdminFlag ? [id, actor.id, actor.isAdmin === true] : [id, actor.id];
+  const changed = await query(update.sql, params);
+
+  const alert = await loadDeskAlert(id);
+  if (!alert) return { kind: 'not_found' };
+  if (changed.rowCount === 1) return { kind: 'applied', alert };
+
+  const verdict = evaluateTransition(action, alert, actor);
+  if (verdict.outcome === 'apply') {
+    // The alert was in another status when the statement ran and has moved
+    // back since: another operator acted at the same instant.
+    return { kind: 'conflict', alert, message: 'This emergency changed while you were updating it. Refresh and try again.' };
+  }
+  return { kind: verdict.outcome, alert, message: verdict.message };
+};
+
+/** Answers a desk action that did not apply. */
+const sendNotApplied = (res, result, unchangedData = {}) => {
+  switch (result.kind) {
+    case 'not_found':
+      return notFound(res, 'Emergency alert not found');
+    case 'unchanged':
+      return success(res, { alert: result.alert, ...unchangedData }, result.message);
+    case 'forbidden':
+      return forbidden(res, result.message);
+    default:
+      return conflict(res, result.message, result.alert);
+  }
+};
+
+/**
+ * An operator takes an alert: pending -> acknowledged. Gated by
+ * requireResponder.
+ *
+ * The UPDATE only matches a pending alert, so when two operators press at
+ * once exactly one wins; the other gets 409 naming who has it. Pressing
  * again on an alert you already hold is not an error.
  */
 const acknowledgeEmergency = async (req, res) => {
@@ -451,28 +571,12 @@ const acknowledgeEmergency = async (req, res) => {
   try {
     if (!UUID_PATTERN.test(String(id))) return error(res, 'Alert id must be a valid UUID', 400);
 
-    const taken = await query(
-      `UPDATE emergency_alerts
-          SET acknowledged_at = NOW(), acknowledged_by = $2
-        WHERE id = $1 AND status = 'active' AND acknowledged_at IS NULL
-        RETURNING id`,
-      [id, req.user.id]
-    );
-
-    const alert = await loadDeskAlert(id);
-    if (!alert) return notFound(res, 'Emergency alert not found');
-
-    if (taken.rowCount === 1) {
-      const reporterNotified = await notifyReporterAcknowledged(alert);
-      return success(res, { alert, reporter_notified: reporterNotified }, 'You have taken this emergency');
+    const result = await runDeskAction('acknowledge', id, actorFor(req, req.responderAccess));
+    if (result.kind === 'applied') {
+      const reporterNotified = await notifyReporter(result.alert, DESK_STATUS.ACKNOWLEDGED);
+      return success(res, { alert: result.alert, reporter_notified: reporterNotified }, 'You have taken this emergency');
     }
-    if (alert.status === 'resolved') {
-      return conflict(res, 'This emergency is already resolved', alert);
-    }
-    if (sameUser(alert.acknowledged_by, req.user.id)) {
-      return success(res, { alert, reporter_notified: null }, 'You already have this emergency');
-    }
-    return conflict(res, `${alert.acknowledged_by_name} has already taken this emergency`, alert);
+    return sendNotApplied(res, result, { reporter_notified: null });
   } catch (err) {
     console.error(`Acknowledge emergency error (alert ${id}):`, err);
     return error(res, 'Failed to acknowledge emergency', 500);
@@ -480,32 +584,137 @@ const acknowledgeEmergency = async (req, res) => {
 };
 
 /**
- * Hands a taken alert back to the queue, e.g. at the end of a shift. Only the
- * operator who holds it, or an administrator, may do so.
+ * Hands a taken alert back to the queue, e.g. at the end of a shift:
+ * acknowledged -> pending. Only the operator who holds it, or an
+ * administrator, may do so.
  */
 const releaseEmergency = async (req, res) => {
   const { id } = req.params;
   try {
     if (!UUID_PATTERN.test(String(id))) return error(res, 'Alert id must be a valid UUID', 400);
 
-    const released = await query(
-      `UPDATE emergency_alerts
-          SET acknowledged_at = NULL, acknowledged_by = NULL
-        WHERE id = $1 AND status = 'active' AND acknowledged_at IS NOT NULL
-          AND ($3::boolean OR acknowledged_by = $2)
-        RETURNING id`,
-      [id, req.user.id, req.user.role === 'admin']
-    );
-
-    const alert = await loadDeskAlert(id);
-    if (!alert) return notFound(res, 'Emergency alert not found');
-    if (released.rowCount === 1) return success(res, { alert }, 'Emergency returned to the queue');
-    if (alert.status === 'resolved') return conflict(res, 'This emergency is already resolved', alert);
-    if (!alert.acknowledged_at) return success(res, { alert }, 'Emergency is already in the queue');
-    return forbidden(res, 'Only the operator who took this emergency, or an administrator, can return it');
+    const result = await runDeskAction('release', id, actorFor(req, req.responderAccess));
+    if (result.kind === 'applied') return success(res, { alert: result.alert }, 'Emergency returned to the queue');
+    return sendNotApplied(res, result);
   } catch (err) {
     console.error(`Release emergency error (alert ${id}):`, err);
     return error(res, 'Failed to return emergency to the queue', 500);
+  }
+};
+
+/**
+ * The 403 a responder's POST /:id/resolve from an older client gets for an
+ * alert another operator holds. That client says "Resolve", not "Addressed".
+ */
+const LEGACY_RESOLVE_NOT_HOLDER = 'Another operator has taken this emergency. Only that operator or an administrator can close it.';
+
+/**
+ * pending or acknowledged -> addressed, then the reporter and their trusted
+ * contacts are told, each in the word Addressed. Shared by POST /:id/address
+ * and a responder's POST /:id/resolve from an older client ([legacy]).
+ * [access] is the responder access read for this request.
+ */
+const markAddressed = async (req, res, id, access, { legacy }) => {
+  const result = await runDeskAction('address', id, actorFor(req, access));
+  if (result.kind !== 'applied') {
+    if (legacy) {
+      // The app 1.0.11 treats anything but 2xx from its "Resolve" as "still
+      // active". An alert already closed, whichever way, is not, so the old
+      // route answers 200 with the status as it is, as the old API did.
+      if (result.kind === 'conflict' && result.alert && !isOpenDeskStatus(result.alert.desk_status)) {
+        return success(res, { alert: result.alert }, result.message);
+      }
+      if (result.kind === 'forbidden') return forbidden(res, LEGACY_RESOLVE_NOT_HOLDER);
+    }
+    return sendNotApplied(res, result);
+  }
+
+  // Neither throws: the alert is addressed whether or not anyone hears it.
+  const [reporterNotified, contactsNotified] = await Promise.all([
+    notifyReporter(result.alert, DESK_STATUS.ADDRESSED),
+    notifyContactsClosed(result.alert, { deskStatus: DESK_STATUS.ADDRESSED }),
+  ]);
+  return success(
+    res,
+    { alert: result.alert, reporter_notified: reporterNotified, contacts_notified: contactsNotified },
+    'Emergency marked Addressed'
+  );
+};
+
+/**
+ * pending or acknowledged -> cancelled, by the person who raised the alert,
+ * then their trusted contacts are told. Shared by POST /:id/cancel and the
+ * sender's POST /:id/resolve from an older client.
+ */
+const cancelOwnAlert = async (req, res, id, { legacy }) => {
+  const result = await runDeskAction('cancel', id, actorFor(req, null));
+  if (result.kind === 'applied') {
+    // Never throws: the alert is cancelled whether or not the contacts hear it.
+    const contactsNotified = await notifyContactsClosed(result.alert, { deskStatus: DESK_STATUS.CANCELLED });
+    return success(res, { alert: ownerView(result.alert), contacts_notified: contactsNotified }, 'Emergency alert cancelled');
+  }
+  const shown = result.alert ? { ...result, alert: ownerView(result.alert) } : result;
+  // The app 1.0.11 treats anything but 2xx as "could not cancel, it is still
+  // open". An alert the desk has already closed is not open, so the old route
+  // answers 200 with the status as it is; /cancel answers 409.
+  if (legacy && shown.kind === 'conflict' && shown.alert && !isOpenDeskStatus(shown.alert.desk_status)) {
+    return success(res, { alert: shown.alert }, shown.message);
+  }
+  return sendNotApplied(res, shown);
+};
+
+/** POST /:id/address. Gated by requireResponder. */
+const addressEmergency = async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (!UUID_PATTERN.test(String(id))) return error(res, 'Alert id must be a valid UUID', 400);
+    return await markAddressed(req, res, id, req.responderAccess, { legacy: false });
+  } catch (err) {
+    console.error(`Address emergency error (alert ${id}):`, err);
+    return error(res, 'Failed to mark the emergency Addressed', 500);
+  }
+};
+
+/** POST /:id/cancel. Only the person who raised the alert. */
+const cancelEmergency = async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (!UUID_PATTERN.test(String(id))) return error(res, 'Alert id must be a valid UUID', 400);
+    return await cancelOwnAlert(req, res, id, { legacy: false });
+  } catch (err) {
+    console.error(`Cancel emergency error (alert ${id}):`, err);
+    return error(res, 'Failed to cancel the emergency alert', 500);
+  }
+};
+
+/**
+ * POST /:id/resolve, kept for the clients that still call it: the app 1.0.11
+ * (the sender's "I'm safe", and a responder's "Resolve") and an admin desk
+ * page loaded before this release. It never records "resolved": the sender
+ * cancels their alert (Cancelled), a responder marks it Addressed. Anyone
+ * else is refused. An alert already closed, whichever way, answers 200 with
+ * its status as it is, as the old API answered "already resolved": the app
+ * 1.0.11 reads anything else as "still active".
+ */
+const resolveEmergency = async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (!UUID_PATTERN.test(String(id))) return error(res, 'Alert id must be a valid UUID', 400);
+
+    const existing = await query('SELECT user_id FROM emergency_alerts WHERE id = $1', [id]);
+    if (existing.rows.length === 0) return notFound(res, 'Emergency alert not found');
+
+    if (sameUser(existing.rows[0].user_id, req.user.id)) {
+      return await cancelOwnAlert(req, res, id, { legacy: true });
+    }
+    const access = await responderAccessOf(req);
+    if (!access) {
+      return forbidden(res, 'Not authorized to resolve this alert');
+    }
+    return await markAddressed(req, res, id, access, { legacy: true });
+  } catch (err) {
+    console.error(`Resolve emergency error (alert ${id}):`, err);
+    return error(res, 'Failed to resolve emergency', 500);
   }
 };
 
@@ -516,7 +725,11 @@ module.exports = {
   resolveEmergency,
   acknowledgeEmergency,
   releaseEmergency,
+  addressEmergency,
+  cancelEmergency,
   updateAlertLocation,
-  withDeskState,
+  withDeskStatus,
+  ownerView,
+  REPORTER_NOTICES,
   EMERGENCY_TYPES,
 };

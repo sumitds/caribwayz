@@ -4,7 +4,7 @@ import {
   MdMap, MdRoute, MdWarning, MdSos, MdGroup,
   MdPerson, MdDashboard, MdBusiness, MdPeople,
   MdLogout, MdCampaign, MdHandshake, MdShield, MdDescription,
-  MdPayments, MdLayers, MdAssignment, MdSettings,
+  MdPayments, MdLayers, MdAssignment, MdSettings, MdLocalOffer, MdEventRepeat,
 } from 'react-icons/md';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -27,6 +27,8 @@ const adminNavItems = [
   { to: '/admin/users', icon: MdPeople, label: 'Manage Users' },
   { to: '/admin/businesses', icon: MdBusiness, label: 'Member Businesses' },
   { to: '/admin/membership-applications', icon: MdAssignment, label: 'Membership Applications' },
+  { to: '/admin/membership-campaigns', icon: MdLocalOffer, label: 'Campaigns' },
+  { to: '/admin/membership-renewals', icon: MdEventRepeat, label: 'Renewal Reminders' },
   { to: '/admin/membership-tiers', icon: MdLayers, label: 'Membership Tiers' },
   { to: '/admin/membership-settings', icon: MdSettings, label: 'Membership Settings' },
   { to: '/admin/partners', icon: MdHandshake, label: 'Partners' },

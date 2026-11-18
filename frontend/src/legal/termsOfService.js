@@ -1,177 +1,513 @@
-// The CaribWayz Terms of Service, as the app shows it.
+// The CaribWayz Terms of Agreement, shown at /terms and in the app.
 //
 // Copied word for word from docs/legal/terms-of-service.md (the same text as
-// mobile/assets/legal/), which goes to the client's lawyer. Change it there
-// and copy it here; test/legal.test.js fails while the two differ.
+// mobile/assets/legal/), the client's final document of 17 November 2026.
+// Change it there and copy it here; test/legal.test.js fails while the two
+// differ.
 
-const termsOfService = `# CaribWayz Terms of Service
+const termsOfService = `# CaribWayz Terms of Agreement
 
-> DRAFT - pending legal review. This text has not yet been approved by a lawyer and may change before it takes effect.
+Version: 1.0
 
-Version: 0.3 (draft)
+Last updated: 18 November 2026
 
-Last updated: 12 November 2026
+CaribWayz — The Super App
 
-## 1. About these terms
+Effective Date: 18 November 2026
 
-These terms are an agreement between you and CARIBWAYZ, a company registered in Jamaica under number 1626/2025, with its registered address at 18 Phoenix, Greater Portmore, Jamaica ("CaribWayz", "we", "us" or "our"). They cover your use of the CaribWayz app and the services we provide through it.
+## 1. PARTIES AND ACCEPTANCE
 
-By creating an account or using the app, you agree to these terms and confirm that you have read our Privacy Policy, which explains how we handle your information. If you do not agree, please do not use CaribWayz.
+These Terms of Agreement (“Terms”) constitute a legally binding agreement between the user (“you”, “your” or “User”) and Christina Baker, proprietor of the registered business name CaribWayz, registered in Jamaica under business registration number 1626/2025 (“CaribWayz”, “we”, “us” or “our”).
 
-## 2. Who can use CaribWayz
+CaribWayz operates as a sole proprietorship in Jamaica.
 
-- You must be at least 18 years old.
-- You must give us accurate details when you create your account and keep them up to date.
-- If you drive, you are responsible for holding a valid driving licence and insurance as the law requires where you drive.
+Principal business address: 18 Phoenix, Greater Portmore, Jamaica
 
-## 3. Your account
+These Terms govern access to and use of the CaribWayz mobile application, website, software, administration systems, products, features and associated services (collectively, the “Platform”).
 
-You are responsible for keeping your sign-in details secure and for everything done with your account. Tell us straight away at info@caribwayz.com if you think someone else has used it.
+By creating an account, selecting an acceptance option, accessing or using a service where electronic acceptance is legally effective, you agree to these Terms and the applicable Privacy Policy and service-specific disclaimers.
 
-You can stop using CaribWayz and delete your account at any time from Settings > Account & Profile > Delete Account.
+Where a feature requires separate consent, additional conditions or a separate agreement, those requirements apply in addition to these Terms.
 
-## 4. Emergency features and the emergency desk
+If you do not agree, you must discontinue use of the relevant service.
 
-Please read this section carefully. It explains what the emergency features can and cannot do.
+## 2. DEFINITIONS
 
-**CaribWayz is not an emergency service.** If you or anyone else is in danger, call your local emergency number first. In Jamaica, call 119 for the police, or 110 for fire or an ambulance. The app shows the numbers for the country you are in under "Call police, fire or ambulance".
+For these Terms:
 
-**No guaranteed response.** When you send an SOS or a crash alert to CaribWayz, it goes to the CaribWayz emergency desk: our team and the responders we approve. They will try to help, for example by contacting the police, fire or ambulance service for you, but we cannot promise that anyone will see your alert, answer it, or act on it within any particular time, or at all.
+- **Platform:** The CaribWayz application, website, software and associated digital services.
+- **User:** Any individual accessing or using the Platform.
+- **Account:** A registered user profile.
+- **Location Data:** Information identifying or indicating a user’s geographical position or movement.
+- **Navigation Services:** GPS-assisted mapping, route planning, directions and related functionality.
+- **Emergency Desk:** CaribWayz’s designated emergency communication and request-management functionality.
+- **CaribOfficial:** The responder-facing component intended for appropriately authorised emergency personnel and participating organisations.
+- **Business User:** A registered business, merchant or service provider using commercial features.
+- **User Content:** Reports, photographs, messages, reviews, descriptions and other information submitted through the Platform.
+- **Third-Party Provider:** An independent organisation supplying technology, infrastructure or services used in connection with CaribWayz.
 
-**Not a replacement for the emergency services.** Sending an alert through CaribWayz does not call the police, fire or ambulance service, and they are not told unless someone on the emergency desk contacts them.
+## 3. ABOUT CARIBWAYZ AND ITS SERVICES
 
-**Alerts can fail.** An alert needs a working phone, a mobile data or Wi-Fi connection, a location fix and our servers to be running. Any of these can fail, especially after a crash, in bad weather, during a disaster or where there is no signal. The app tells you if an alert could not be sent, but you should not rely on it as your only way to get help.
+CaribWayz is a Caribbean-focused navigation, mobility, road-safety and digital services platform.
 
-**Crash and shake detection are aids, not guarantees.** They use your phone's motion sensors and can miss a real crash or mistake something else for one. If an alert is sent by mistake, cancel it in the app as soon as you can.
+Depending on availability, geographic coverage, eligibility and applicable additional terms, services may include:
 
-**Group SOS reaches your group only.** A group SOS alerts the other members of your group trip. It does not reach the emergency desk or the emergency services.
+### 3.1 Navigation and Mobility
 
-**Your emergency contact.** CaribWayz does not message your emergency contact for you. The app opens your own messaging app with a message ready, and it is only sent when you press send. Normal message charges from your mobile provider apply.
+- GPS navigation and route guidance.
+- Destination searches and location identification.
+- Estimated arrival times.
+- Group navigation and location sharing.
+- Saved locations and travel functions.
 
-**Medical details** are shared with an alert only if you switched on "Share medical info on emergency". We do not check them, and responders may rely on them, so keep them accurate.
+### 3.2 Safety and Emergency Communication
 
-**Use the emergency features honestly.** Do not send false or test alerts. Misuse takes people away from real emergencies and may lead to your account being suspended.
+- SOS and emergency request submission.
+- Crash and motion-detection alerts.
+- Emergency location sharing.
+- Emergency request notifications and status updates.
+- CaribOfficial responder access.
+- Safe-arrival confirmations.
 
-## 5. Navigation, maps and road information
+### 3.3 Community and Road Information
 
-CaribWayz gives you directions, maps, travel times, speed limits, places, road reports, weather and disaster alerts to help you on the road. This information comes from many sources, including other users, open map data and public weather services, and it can be incomplete, out of date or wrong.
+- Pothole, traffic and hazard reporting.
+- Accident, obstruction, flood and landslide reports.
+- Community confirmations and updates.
+- Road-safety notifications.
 
-- Always obey the law, road signs, traffic signals and police instructions, even where the app says something different.
-- Use your own judgment. Do not follow a route that looks unsafe, closed or illegal.
-- Do not handle your phone while driving. Set your route before you set off, use voice guidance, and only touch the app when it is safe and legal to do so.
-- Travel times, speed limits and arrival times are estimates.
+### 3.4 Business and Commercial Services
 
-### 5.1 Storm, earthquake and tsunami alerts
+- Business listings.
+- Business verification.
+- Memberships and subscriptions.
+- Promotional announcements.
+- Business location management.
+- Advertising and other commercial services.
 
-Disaster alerts come from public sources such as the United States National Hurricane Center, the National Oceanic and Atmospheric Administration and the United States Geological Survey. They are for information only and may be delayed. Always follow the official warnings and instructions of your national authorities, such as the Office of Disaster Preparedness and Emergency Management (ODPEM) and the Meteorological Service of Jamaica, and of local emergency services.
+### 3.5 Additional Super App Services
 
-### 5.2 Roadside help and places
+CaribWayz may introduce services such as Drive & Earn, StayEZ, Experiences, SplitIt, rewards, payment-related functions and other digital products.
 
-Businesses, service providers and places shown in the app are run by others. We do not check, recommend or guarantee them, and any arrangement you make with them is between you and them.
+The inclusion of a service in these Terms does not guarantee that it has been released or is currently available. A service becomes subject to its applicable operating conditions when introduced.
 
-## 6. Group trips and location sharing
+## 4. ELIGIBILITY AND ACCOUNT REGISTRATION
 
-When you join a group trip, the other members see your name, profile photo, live position and arrival time until you leave the group. Only invite or join people you trust, and only share a join code with people you want in the group. You can leave a group at any time.
+4.1 Independent account registration is restricted to individuals aged eighteen (18) years or older unless a particular service expressly permits otherwise under applicable law.
 
-Do not use CaribWayz to track anyone without their knowledge and agreement.
+4.2 Users must provide accurate, current and complete registration information.
 
-## 7. Things you post
+4.3 Users are responsible for maintaining the confidentiality of account credentials and activities conducted through their accounts.
 
-You may post road reports, incident records, group names, profile photos and other content ("your content"). You keep ownership of your content. You give CaribWayz a non-exclusive, royalty-free licence to store, use, display and share your content to run and improve the service, for example by showing your road reports to other drivers. This licence ends when your content is deleted, except for copies other users already received.
+4.4 Accounts must not be created using false identities or another person’s information without lawful authority.
 
-You must not post content that:
+4.5 CaribWayz may request additional verification where reasonably necessary for security, fraud prevention, eligibility or legal compliance.
 
-- Is false or misleading, such as made-up road reports.
-- Is unlawful, threatening, abusive, hateful or obscene.
-- Contains someone else's personal information that you are not entitled to share.
-- Infringes someone else's rights.
+4.6 CaribWayz may decline, restrict or suspend registration where verification cannot be completed or misuse is reasonably suspected.
 
-We may remove content that breaks these terms, and our administrators may remove road reports to keep the map accurate.
+## 5. USER RESPONSIBILITIES AND ACCEPTABLE USE
 
-## 8. Acceptable use
+Users must use CaribWayz lawfully and responsibly.
 
 You must not:
 
-- Use CaribWayz in a way that breaks the law or puts anyone in danger.
-- Try to access accounts, data or parts of the service that you are not allowed to access.
-- Interfere with, overload or disrupt the service, or try to get around its security or limits.
-- Copy, scrape or resell the service or its data, or use it to build a competing product.
-- Pretend to be someone else, or claim to be an emergency responder when you are not.
+a. Use the Platform for unlawful or fraudulent activities.
 
-## 9. Third-party services
+b. Submit deliberately false, misleading or malicious information.
 
-CaribWayz uses services provided by other companies, such as Google, Firebase, Meta (for Facebook sign-in), OpenStreetMap and weather providers. Your use of those services may also be covered by their own terms.
+c. Misuse SOS, Emergency Desk or responder functionality.
 
-Map data is provided by OpenStreetMap contributors and is available under the Open Database Licence. Weather data is provided by the Norwegian Meteorological Institute. The open-source software CaribWayz is built with is listed in Settings > Legal > Open-source licences.
+d. Impersonate another person, business, public authority or emergency responder.
 
-## 10. Fees
+e. Obtain unauthorised access to accounts, locations or personal information.
 
-CaribWayz is currently free to use. Your mobile provider may charge you for data and text messages. If we introduce paid features, we will tell you the price and any extra terms before you pay.
+f. Interfere with or disrupt Platform systems or networks.
 
-## 11. Our rights in CaribWayz
+g. Introduce malicious software or harmful code.
 
-The app, its design, its name and logo, and the software and content we provide belong to CaribWayz or our licensors. We give you a personal, non-exclusive, non-transferable licence to use the app on devices you own or control, for your own non-commercial use, in line with these terms and the rules of the app store you got it from.
+h. Reverse engineer, reproduce or extract protected software, except where permitted by law.
 
-## 12. Changes to the service
+i. Use bots, scraping tools or automated methods to collect Platform information without authorisation.
 
-We are improving CaribWayz all the time. We may add, change or remove features, and the service may sometimes be unavailable for maintenance or for reasons outside our control. We will try to tell you in advance about changes that significantly affect you.
+j. Harass, threaten, stalk or intimidate another person.
 
-## 13. Suspending or closing accounts
+k. Infringe intellectual property, privacy or other legal rights.
 
-We may suspend or close your account if you seriously or repeatedly break these terms, misuse the emergency features, or if the law requires us to. Where it is reasonable, we will tell you why and give you a chance to respond. You can close your account at any time.
+l. Misrepresent business credentials or professional qualifications.
 
-## 14. Disclaimers
+m. Track another individual without lawful authority or appropriate consent.
 
-CaribWayz is provided "as is" and "as available". To the extent the law allows, we do not promise that the service will be uninterrupted, error-free, accurate or suitable for any particular purpose, or that emergency alerts will be received or answered.
+n. Circumvent payment requirements, security controls or account restrictions.
 
-Nothing in these terms takes away rights you have under consumer protection law that cannot be excluded by agreement, including Jamaica's Consumer Protection Act.
+Users remain responsible for their conduct and decisions while using the Platform.
 
-## 15. Limits on our liability
+## 6. NAVIGATION AND GPS SERVICES
 
-To the extent the law allows:
+6.1 Navigation services are intended to assist users with route planning, geographical information and travel decisions.
 
-- We are not responsible for loss or damage caused by your driving, by your reliance on directions, maps, road reports, weather or disaster information, or by an emergency alert not being received, answered or acted on.
-- We are not responsible for the acts or omissions of other users, group members, emergency services, roadside businesses or other third parties.
-- We are not liable for indirect or consequential loss, or for loss of profit, data or opportunity.
-- Our total liability to you for any claim about CaribWayz is limited to [Liability cap amount].
+6.2 Information may originate from GPS technology, mapping databases, software, public sources and third-party providers.
 
-Nothing in these terms limits our liability for death or personal injury caused by our negligence, for fraud, or for anything else the law does not allow us to limit.
+6.3 Information may be affected by weak GPS signals, network interruptions, inaccurate map data, road closures, construction, weather, disasters and software or provider failures.
 
-## 16. Your responsibility to us
+6.4 CaribWayz does not guarantee that every route, direction, speed limit, destination, travel time or geographical representation will be accurate or current.
 
-If you break these terms or the law and someone makes a claim against us because of it, you agree to cover our reasonable losses and costs, to the extent the law allows.
+6.5 Users must obey applicable road traffic laws, traffic signals, road signs and lawful instructions from police and emergency personnel.
 
-## 17. Changes to these terms
+6.6 Navigation instructions must never take priority over road safety or the user’s reasonable assessment of the circumstances.
 
-We may update these terms when the service or the law changes. We will show the new version in the app with its date, and if a change is significant we will tell you before it takes effect. If you keep using CaribWayz after the change takes effect, the new terms apply. If you do not agree, you can delete your account.
+6.7 Users must not operate or interact with the application while driving in a manner that creates danger or violates applicable law.
 
-## 18. Governing law and disputes
+6.8 CaribWayz does not assume responsibility for the user’s vehicle operation, driving decisions or conduct on public roads.
 
-These terms are governed by the laws of Jamaica. If there is a dispute, please contact us first at info@caribwayz.com so we can try to resolve it. If we cannot, the courts of Jamaica will have jurisdiction, although if you live elsewhere you may also have the right to bring a claim in your own country's courts.
+## 7. GROUP NAVIGATION AND LOCATION SHARING
 
-## 19. App store terms
+7.1 Group navigation enables participating users to coordinate journeys and share relevant location and travel information.
 
-If you downloaded CaribWayz from the Apple App Store or Google Play:
+7.2 Users are responsible for deciding whether to join a group and share their location.
 
-- These terms are between you and CaribWayz, not Apple or Google. CaribWayz, not Apple or Google, is responsible for the app and its content.
-- Apple has no obligation to provide maintenance or support for the app.
-- If the app fails to meet any warranty that applies, you may tell Apple, and Apple will refund the purchase price, if any. To the extent the law allows, Apple has no other warranty obligation for the app.
-- CaribWayz, not Apple, is responsible for handling any claims about the app, including product liability claims, claims that it fails to meet a legal or regulatory requirement, and consumer protection claims.
-- CaribWayz, not Apple, is responsible for investigating and dealing with any claim that the app infringes someone else's intellectual property rights.
-- You confirm that you are not located in a country subject to a United States government embargo, and that you are not on any United States government list of prohibited or restricted parties.
-- Apple and its subsidiaries are third-party beneficiaries of these terms and may enforce them against you.
+7.3 Group participants may see information such as names, profile photographs, live positions and estimated arrival times, depending on the feature.
 
-## 20. General
+7.4 Location information may be delayed, inaccurate or unavailable.
 
-If any part of these terms cannot be enforced, the rest still applies. If we do not enforce a term straight away, we can still enforce it later. You may not transfer your rights under these terms to anyone else. We may transfer ours to a company that takes over CaribWayz, and we will tell you if we do.
+7.5 Users should only share group invitation codes with intended participants.
 
-## 21. Contact us
+7.6 Users may leave a group or discontinue location sharing through available controls.
 
-CARIBWAYZ
+7.7 Unauthorised tracking, stalking, harassment and misuse of location-sharing features are prohibited.
 
-18 Phoenix, Greater Portmore, Jamaica
+## 8. EMERGENCY DESK AND SOS SERVICES
+
+8.1 The Platform may provide SOS, crash-alert and emergency communication functionality.
+
+8.2 The Emergency Desk is a technology-supported communication and request-management service. It is not a police force, fire brigade, ambulance service, hospital or government emergency dispatch authority.
+
+8.3 Submitting an emergency request does not guarantee that the request will be received, acknowledged, accepted, escalated, dispatched or physically attended.
+
+8.4 Unless established by a separate written agreement, CaribWayz does not exercise command over independent emergency services or guarantee their actions.
+
+8.5 Users must contact official emergency services directly when immediate assistance is required.
+
+8.6 Emergency statuses displayed in the application indicate the status recorded within the Platform and do not necessarily confirm physical attendance or resolution.
+
+8.7 Detailed conditions governing SOS submissions, emergency personnel, responder access, location accuracy and service limitations are contained in the separate CaribWayz Emergency Desk Disclaimer, which forms part of the applicable service terms.
+
+8.8 Users accessing emergency functionality must review and acknowledge the applicable Emergency Desk Disclaimer.
+
+## 9. CARIBOFFICIAL AND AUTHORISED RESPONDERS
+
+9.1 CaribOfficial is intended to facilitate authorised access to relevant emergency information.
+
+9.2 Access is restricted to individuals or organisations approved through the applicable verification process.
+
+9.3 Access does not automatically confer police, medical, fire, government or other official status.
+
+9.4 Responders must provide accurate professional and organisational information and maintain the confidentiality of information accessed.
+
+9.5 Responders must use the Platform only for legitimate and authorised purposes.
+
+9.6 Unauthorised access, disclosure, impersonation or misuse may result in immediate suspension and referral to relevant authorities where appropriate.
+
+9.7 Any formal partnership, government endorsement, dispatch arrangement or institutional commitment must be supported by a separate written agreement or appropriate written authorisation.
+
+## 10. ROAD HAZARDS AND USER-GENERATED INFORMATION
+
+10.1 CaribWayz may permit users to report road hazards, accidents, obstructions, traffic conditions and other relevant information.
+
+10.2 Reports may be reviewed, confirmed, updated, moderated or removed.
+
+10.3 User-generated information may be inaccurate, incomplete, duplicated or outdated.
+
+10.4 The appearance of a report does not constitute independent verification by CaribWayz.
+
+10.5 Users must exercise independent judgment before acting on reported information.
+
+10.6 CaribWayz may remove or restrict reports where necessary for safety, accuracy, security or legal compliance.
+
+## 11. DRIVE & EARN AND DRIVER-RELATED SERVICES
+
+11.1 Where Drive & Earn or another driver programme is introduced, participation will be subject to separate eligibility and programme requirements.
+
+11.2 Participants may be required to provide identity, vehicle, licensing, insurance and other verification information.
+
+11.3 Users must comply with applicable transportation, licensing, insurance, tax and other legal requirements.
+
+11.4 Earnings, rewards and incentives will be determined by the applicable programme rules and verified transactions.
+
+11.5 Displayed balances may be pending and are not necessarily cleared or withdrawable funds.
+
+11.6 Payments may be subject to verification, processing periods, banking arrangements, fees and applicable law.
+
+11.7 CaribWayz does not guarantee income, trip availability or financial returns.
+
+## 12. BUSINESS SERVICES AND MEMBERSHIPS
+
+12.1 CaribWayz may provide commercial features, including business listings, membership classifications, verification, promotional announcements and additional locations.
+
+12.2 Membership categories, pricing, benefits, eligibility and renewal requirements will be disclosed through the applicable business application or supplementary agreement.
+
+12.3 Business verification is subject to review and approval.
+
+12.4 Verification does not guarantee a business’s quality, financial standing, reliability or legal compliance.
+
+12.5 Businesses are responsible for accurate listings, contact details, descriptions, prices, operating hours and promotional material.
+
+12.6 Businesses must maintain applicable registrations, licences and operating approvals.
+
+12.7 Membership does not guarantee customer traffic, sales, revenue or commercial results.
+
+12.8 CaribWayz may suspend or remove business content that is misleading, unlawful, unsafe or inconsistent with Platform policies.
+
+12.9 Additional locations, promotional placements and optional services may attract separate fees.
+
+## 13. PAYMENTS, SUBSCRIPTIONS AND REFUNDS
+
+13.1 CaribWayz may offer free and paid services.
+
+13.2 Applicable prices, billing periods, payment methods, fees, renewal conditions and cancellation requirements will be disclosed before a paid transaction is completed.
+
+13.3 Payments may be processed through authorised third-party payment providers or app stores.
+
+13.4 Where automatic renewal applies, users will be informed of the relevant renewal and cancellation arrangements before subscribing.
+
+13.5 Users are responsible for maintaining accurate payment information and managing subscriptions through the applicable payment channel.
+
+13.6 Refunds and cancellations will be handled in accordance with applicable law and the relevant transaction terms.
+
+13.7 CaribWayz may restrict paid services for overdue, reversed or suspected fraudulent transactions, subject to applicable law.
+
+13.8 Additional commercial and financial features may have separate written terms.
+
+## 14. THIRD-PARTY SERVICES
+
+14.1 CaribWayz may rely on external providers, including Google, Firebase, Meta, Render, OpenStreetMap-related services, mapping providers, weather services, telecommunications companies and payment processors.
+
+14.2 Such providers may operate under separate terms and privacy policies.
+
+14.3 CaribWayz does not control independent third-party systems and cannot guarantee their availability, accuracy or performance.
+
+14.4 Map data attributed to OpenStreetMap contributors is subject to the Open Database Licence.
+
+14.5 Weather and disaster information may originate from public and third-party sources and may be delayed or incomplete.
+
+14.6 Open-source components and their licences may be reviewed through Settings → Legal → Open-source licences.
+
+## 15. INTELLECTUAL PROPERTY
+
+15.1 CaribWayz and its licensors retain all rights in the Platform and proprietary materials, including the CaribWayz name, branding, logo, software, designs, interfaces, documentation and original content.
+
+15.2 Users receive a limited, personal, non-exclusive, non-transferable and revocable licence to use the Platform for its intended purposes.
+
+15.3 Users may not reproduce, distribute, modify, commercially exploit or create derivative works from CaribWayz intellectual property without written authorisation, except where permitted by law.
+
+15.4 Users retain ownership of content they lawfully create and submit.
+
+15.5 By submitting content, users grant CaribWayz a non-exclusive, royalty-free, worldwide licence to host, store, reproduce, display and use that content as reasonably necessary to operate, maintain and improve the Platform and its services.
+
+15.6 Users represent that they have the rights and permissions necessary to submit their content.
+
+15.7 This licence is subject to applicable privacy, intellectual property and data protection requirements and does not transfer ownership of user content to CaribWayz.
+
+## 16. PRIVACY AND PERSONAL INFORMATION
+
+16.1 Personal information is processed in accordance with the CaribWayz Privacy Policy and applicable data protection legislation.
+
+16.2 Users acknowledge that particular features require certain personal information, device permissions or location access.
+
+16.3 Users may manage available permissions through application and device settings.
+
+16.4 Restricting permissions may affect the availability of particular services.
+
+16.5 Information will only be processed for specified and lawful purposes and on an applicable legal basis.
+
+16.6 Where separate consent is required, it will be obtained through an appropriate mechanism.
+
+16.7 The Privacy Policy forms part of the legal framework governing the Platform and provides further information about data collection, disclosure, retention, security and individual rights.
+
+## 17. SERVICE AVAILABILITY AND MODIFICATIONS
+
+17.1 CaribWayz may introduce, modify, update, suspend or discontinue features.
+
+17.2 The Platform may become unavailable due to maintenance, technical failures, telecommunications interruptions, cybersecurity incidents, third-party service disruptions or circumstances beyond reasonable control.
+
+17.3 CaribWayz will take reasonable steps to maintain and restore services where practicable.
+
+17.4 Material changes will be communicated where reasonably practicable and as required by law.
+
+17.5 Nothing in this section removes mandatory statutory rights.
+
+## 18. USER CONTENT AND MODERATION
+
+18.1 Users are responsible for content they submit.
+
+18.2 Content must not be unlawful, defamatory, threatening, discriminatory, fraudulent, misleading or infringing.
+
+18.3 CaribWayz may review, restrict, remove or disable content that violates these Terms, creates a safety risk or exposes the Platform or its users to legal or operational risk.
+
+18.4 Moderation does not guarantee that all inaccurate or unlawful content will be identified before publication.
+
+## 19. DISCLAIMERS AND LIMITATION OF LIABILITY
+
+19.1 The Platform is provided on an “as available” basis, subject to applicable legal obligations.
+
+19.2 CaribWayz does not warrant uninterrupted availability, complete accuracy or error-free operation.
+
+19.3 Navigation, GPS, community reports, weather information, emergency notifications and third-party services may be inaccurate, delayed or unavailable.
+
+19.4 CaribWayz does not guarantee emergency assistance, emergency dispatch, responder availability or physical response.
+
+19.5 Users remain responsible for their actions, travel choices and decisions.
+
+19.6 To the fullest extent permitted by applicable law, CaribWayz shall not be liable for losses arising solely from:
+
+a. A user’s failure to exercise reasonable care or comply with applicable law.
+
+b. Inaccurate or misleading information independently submitted by another user or third party.
+
+c. An independent third-party service failure beyond CaribWayz’s reasonable control.
+
+d. A user’s device failure, loss of connectivity or incorrect device settings.
+
+e. The independent acts or omissions of emergency services or other organisations outside CaribWayz’s control.
+
+19.7 Nothing in these Terms excludes liability for fraud, fraudulent misrepresentation, death or personal injury caused by negligence, or any liability that cannot lawfully be excluded or restricted.
+
+19.8 Nothing in these Terms removes consumer rights, statutory protections or legal remedies that cannot lawfully be excluded.
+
+19.9 No monetary liability cap is established by these Terms unless a separately reviewed and legally enforceable provision is expressly adopted.
+
+## 20. INDEMNIFICATION
+
+To the extent permitted by law, users agree to indemnify CaribWayz and its proprietor against reasonable losses, damages, liabilities and legal expenses arising directly from:
+
+- Material breach of these Terms.
+- Unlawful or fraudulent use of the Platform.
+- Deliberately false or malicious submissions.
+- Infringement of another person’s rights.
+- Misuse of emergency or location-sharing functionality.
+
+This provision does not require indemnification for losses caused by CaribWayz’s own negligence, unlawful conduct or breach of legal obligations.
+
+## 21. SUSPENSION AND TERMINATION
+
+21.1 Users may discontinue use and request account deletion through the available account-management process.
+
+21.2 CaribWayz may restrict, suspend or terminate accounts where reasonably necessary due to:
+
+- Material or repeated breaches.
+- Fraud or impersonation.
+- Emergency feature misuse.
+- Unauthorised access.
+- Threats to user safety or Platform security.
+- Non-payment of applicable charges.
+- Legal or regulatory requirements.
+
+21.3 Where practicable, CaribWayz will provide notice and an opportunity to address the issue, except where immediate action is reasonably necessary to protect users, the public, the Platform or a legal interest.
+
+21.4 Users may challenge account restrictions through the official support channel.
+
+21.5 Termination does not automatically cancel outstanding payment obligations or resolve pending transactions.
+
+21.6 Provisions intended to survive termination will remain effective.
+
+## 22. FORCE MAJEURE
+
+CaribWayz will not be responsible for a delay or failure to perform an obligation to the extent that performance is prevented by circumstances beyond its reasonable control.
+
+These may include hurricanes, earthquakes, flooding, epidemics, civil disturbances, government restrictions, widespread power failures, telecommunications interruptions, cyberattacks and other extraordinary events.
+
+CaribWayz will take reasonable steps to mitigate disruption and restore affected services where practicable.
+
+This provision does not excuse obligations that cannot lawfully be suspended or excluded.
+
+## 23. CHANGES TO THESE TERMS
+
+23.1 CaribWayz may amend these Terms to reflect changes in services, technology, business operations or applicable law.
+
+23.2 Updated Terms will display an effective date and revision date.
+
+23.3 Material changes will be communicated through an appropriate Platform notification, website notice, email or other reasonable method.
+
+23.4 Where required by law or the nature of the change, renewed acceptance will be obtained before the affected service continues.
+
+23.5 Continued use constitutes acceptance only where permitted by applicable law and where adequate notice has been provided.
+
+## 24. COMPLAINTS AND DISPUTE RESOLUTION
+
+24.1 Users should first contact CaribWayz to attempt to resolve complaints and disputes.
+
+24.2 Complaints should include sufficient information to identify the relevant account, transaction or service and explain the issue.
+
+24.3 CaribWayz will take reasonable steps to acknowledge, investigate and address complaints.
+
+24.4 Where informal resolution is unsuccessful, the parties may pursue appropriate legal remedies or agreed dispute-resolution procedures.
+
+24.5 Nothing prevents users from contacting a competent regulator, consumer protection agency or court.
+
+## 25. GOVERNING LAW AND JURISDICTION
+
+These Terms are governed by the laws of Jamaica, subject to mandatory laws applicable to users in other jurisdictions.
+
+Subject to applicable consumer protection and jurisdictional rights, disputes may be submitted to the courts of competent jurisdiction in Jamaica.
+
+Nothing in this section deprives a user of rights that cannot lawfully be excluded.
+
+## 26. APP STORE AND DISTRIBUTION PLATFORM TERMS
+
+Where CaribWayz is downloaded through the Apple App Store or Google Play:
+
+a. These Terms are between the user and the proprietor trading as CaribWayz, not Apple or Google.
+
+b. CaribWayz is responsible for the application and its content, subject to applicable law.
+
+c. Apple and Google are not responsible for providing maintenance or support except where their own agreements require otherwise.
+
+d. Applicable claims concerning the application, including product liability, legal compliance, consumer protection and intellectual property, will be addressed by CaribWayz to the extent required by law.
+
+e. App store purchases, refunds and subscriptions may also be subject to the relevant store’s policies.
+
+f. Where required by Apple’s applicable standard end-user licence provisions, Apple and its subsidiaries are third-party beneficiaries entitled to enforce the applicable provisions.
+
+g. Users must comply with applicable export-control, sanctions and platform eligibility requirements.
+
+## 27. GENERAL PROVISIONS
+
+**Entire Agreement:** These Terms, the Privacy Policy and applicable service-specific terms form the agreement governing use of the relevant services.
+
+**Severability:** An invalid or unenforceable provision does not invalidate the remaining provisions.
+
+**No Waiver:** Failure to enforce a provision does not constitute permanent waiver.
+
+**Assignment:** Users may not transfer their rights or obligations without written authorisation. CaribWayz may transfer its rights and obligations in connection with a lawful business transfer or restructuring, subject to applicable law.
+
+**Electronic Acceptance:** Acceptance may be recorded electronically where the requirements of applicable law are satisfied.
+
+**Notices:** Official notices may be delivered through the Platform, registered email or another reasonable communication method.
+
+**Language:** These Terms are prepared in English. Translations may be provided, but mandatory consumer rights remain unaffected.
+
+## 28. CONTACT INFORMATION
+
+For enquiries, complaints, legal notices or concerns relating to these Terms:
+
+CARIBWAYZ®
+
+Proprietor: Christina Baker
+
+Business registration number: 1626/2025
+
+Business structure: Sole proprietorship
+
+Country: Jamaica
+
+Principal business address: 18 Phoenix, Greater Portmore, Jamaica
 
 Email: info@caribwayz.com
+
+© 2026 CaribWayz®. All rights reserved.
+
+CaribWayz — The Super App
+
+Drive smarter. Travel safer. Explore more.
 `;
 
 export default termsOfService;

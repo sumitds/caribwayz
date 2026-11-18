@@ -11,7 +11,9 @@ const {
   BROADCAST_TYPES,
 } = require('../controllers/adminController');
 const members = require('../controllers/memberAdminController');
-const { MEMBERSHIP_STATUSES, APPLICATION_STATUSES } = require('../services/membership');
+const {
+  MEMBERSHIP_STATUSES, APPLICATION_STATUSES, CAMPAIGN_KINDS, CAMPAIGN_STATES, isCalendarDay,
+} = require('../services/membership');
 const { isWebAddress } = require('../utils/webAddress');
 
 router.use(authenticate, requireAdmin);
@@ -73,6 +75,10 @@ const coordinate = (field, limit, label, { required }) => (required ? body(field
   .custom(isScalar).withMessage(`Valid ${label} required`).bail()
   .isFloat({ min: -limit, max: limit }).withMessage(`Valid ${label} required (-${limit} to ${limit})`);
 
+/** A calendar day, YYYY-MM-DD (migration 034: featured placement and campaigns). */
+const calendarDay = (field, label, { required }) => (required ? body(field) : body(field).optional())
+  .custom(isCalendarDay).withMessage(`${label} must be a date (YYYY-MM-DD)`);
+
 const bothOrNeither = body('longitude').custom((longitude, { req }) => {
   if ((req.body.latitude === undefined) !== (longitude === undefined)) {
     throw new Error('Give both latitude and longitude, or neither');
@@ -109,6 +115,15 @@ const businessRules = (required) => [
   wholeNumber('employee_count', 1, 'Employee count', { max: 1000000 }),
   dateTime('membership_expires_at', 'Membership expiry'),
   dateTime('promo_expires_at', 'Promotion expiry'),
+  // Featured placement (migration 034): ticking it needs an end date.
+  body('is_featured').optional().isBoolean({ strict: true }).withMessage('is_featured must be true or false'),
+  body('featured_until').optional({ values: 'null' })
+    .custom((v) => v === '' || isCalendarDay(v)).withMessage('Featured until must be a date (YYYY-MM-DD)'),
+  body('featured_until').custom((v, { req }) => {
+    const missing = v === null || v === '' || (required && v === undefined);
+    if (req.body.is_featured === true && missing) throw new Error('Give the date the featured placement ends');
+    return true;
+  }),
 ];
 
 router.get('/businesses', [
@@ -172,6 +187,39 @@ router.put('/membership-settings', [
     .isLength({ max: 5000 }).withMessage('Payment instructions must be at most 5000 characters'),
   email('contact_email', 'Contact email'),
 ], validate, members.updateSettings);
+
+// Promotional and seasonal campaigns (migration 034). The offer text is
+// spoken in the app, so it has the promotion's limit of 280 characters.
+const offerText = (required) => (required ? body('offer_text') : body('offer_text').optional())
+  .isString().withMessage('Offer text is required').bail()
+  .custom((v) => v.trim().length >= 1).withMessage('Offer text is required').bail()
+  .custom((v) => v.trim().length <= 280).withMessage('Offer text must be at most 280 characters');
+
+const campaignRules = (required) => [
+  ...(required ? [body('business_id').isUUID().withMessage('Choose a business')] : []),
+  (required ? body('kind') : body('kind').optional())
+    .isIn(CAMPAIGN_KINDS).withMessage(`kind must be one of: ${CAMPAIGN_KINDS.join(', ')}`),
+  offerText(required),
+  calendarDay('start_date', 'Start date', { required }),
+  calendarDay('end_date', 'End date', { required }),
+];
+const campaignId = param('id').isUUID().withMessage('Unknown campaign');
+
+router.get('/membership-campaigns', [
+  query('business_id').optional().isUUID().withMessage('Unknown business'),
+  query('state').optional().isIn(CAMPAIGN_STATES).withMessage(`state must be one of: ${CAMPAIGN_STATES.join(', ')}`),
+], validate, members.getCampaigns);
+router.post('/membership-campaigns', campaignRules(true), validate, members.addCampaign);
+router.patch('/membership-campaigns/:id', [campaignId, ...campaignRules(false)], validate, members.updateCampaign);
+router.post('/membership-campaigns/:id/end', [campaignId], validate, members.endCampaign);
+router.delete('/membership-campaigns/:id', [campaignId], validate, members.deleteCampaign);
+
+// Renewal reminders (migration 034): sent only by an admin's click.
+router.get('/membership-renewals', members.getRenewals);
+router.post('/membership-renewals/:id/remind', [
+  param('id').isUUID().withMessage('Unknown business'),
+  body('resend').optional().isBoolean({ strict: true }).withMessage('resend must be true or false'),
+], validate, members.sendReminder);
 
 router.get('/broadcasts', getBroadcasts);
 router.post('/broadcasts', [

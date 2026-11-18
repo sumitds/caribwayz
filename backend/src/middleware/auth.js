@@ -74,8 +74,11 @@ const requireAdmin = (req, res, next) => {
  * unauthenticated registration, so trusting it would let anyone grant
  * themselves access to every active emergency.
  *
- * Returns { allowed, reason }. Throws only if the database is unreachable, and
- * callers must fail closed on that.
+ * Returns { allowed, reason } when refused, and { allowed, userType, role }
+ * when allowed: role is users.role as stored now, which callers use to decide
+ * admin-only actions instead of the token's role claim (that claim lasts as
+ * long as the token, after the role is taken away). Throws only if the
+ * database is unreachable, and callers must fail closed on that.
  */
 const resolveResponderAccess = async (userId) => {
   const result = await query(
@@ -98,18 +101,19 @@ const resolveResponderAccess = async (userId) => {
   }
 
   if (user.role === 'admin') {
-    return { allowed: true, userType: 'admin' };
+    return { allowed: true, userType: 'admin', role: user.role };
   }
 
   if (user.is_responder === true) {
-    return { allowed: true, userType: user.user_type };
+    return { allowed: true, userType: user.user_type, role: user.role };
   }
 
   return { allowed: false, reason: 'Responder access required' };
 };
 
 /**
- * Express guard around [resolveResponderAccess]. Attaches req.user.user_type.
+ * Express guard around [resolveResponderAccess]. Attaches req.user.user_type,
+ * and the access it read as req.responderAccess ({ allowed, userType, role }).
  */
 const requireResponder = async (req, res, next) => {
   if (!req.user || !req.user.id) {
@@ -122,6 +126,7 @@ const requireResponder = async (req, res, next) => {
       return forbidden(res, access.reason);
     }
     req.user.user_type = access.userType;
+    req.responderAccess = access;
     return next();
   } catch (err) {
     console.error('Responder check error:', err);

@@ -10,6 +10,7 @@ const { sessionService, clientPlatform } = require('../services/sessionService')
 const { buildTwoFactorService } = require('../services/twoFactorService');
 const { normalizeContactPhone } = require('../utils/phone');
 const contactAlertService = require('../services/contactAlertService');
+const legalAcceptance = require('../services/legalAcceptance');
 
 const register = async (req, res) => {
   try {
@@ -23,6 +24,15 @@ const register = async (req, res) => {
     // until the person enters a code that was emailed to it.
     const email = normalizeEmail(req.body.email);
 
+    // The Terms of Service and Privacy Policy the person accepted
+    // (services/legalAcceptance.js). Neither field means an app from before
+    // acceptance (1.0.11 and earlier): signed up as before, nothing recorded,
+    // and the current app asks them to accept on its next launch.
+    const acceptance = legalAcceptance.readAcceptance(req.body);
+    if (acceptance.status === 'refused') {
+      return legalAcceptance.refuseAcceptance(res, acceptance.code);
+    }
+
     const existing = await query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
     if (existing.rows.length > 0) {
       return error(res, EMAIL_TAKEN, 409);
@@ -35,26 +45,44 @@ const register = async (req, res) => {
     // but is not put on the list of numbers to text.
     const firstContact = normalizeContactPhone(emergency_contact);
 
-    let result;
-    try {
-      result = await query(
+    /** Inserts the account and its preferences row through [run]. */
+    const insertAccount = async (run) => {
+      const inserted = await run(
         `INSERT INTO users (name, email, phone, emergency_contact, emergency_contacts, user_type, password_hash, auth_provider, role)
          VALUES ($1, $2, $3, $4, $5::text[], $6, $7, 'email', 'user')
          RETURNING id, name, email, phone, emergency_contact, emergency_contacts, user_type, role, status, is_responder, created_at`,
         [name, email, phone, emergency_contact, firstContact ? [firstContact] : [], user_type || 'CaribDrivers', password_hash]
       );
+      await run(
+        `INSERT INTO user_preferences (user_id) VALUES ($1)`,
+        [inserted.rows[0].id]
+      );
+      return inserted.rows[0];
+    };
+
+    let user;
+    try {
+      if (acceptance.status === 'accepted') {
+        // The account and the evidence of its acceptance commit together.
+        user = await inTransaction(async (run) => {
+          const created = await insertAccount(run);
+          await legalAcceptance.recordAcceptance(run, {
+            userId: created.id,
+            versions: acceptance.versions,
+            method: legalAcceptance.METHODS.emailSignUp,
+            ...legalAcceptance.evidenceFrom(req),
+          });
+          return created;
+        });
+      } else {
+        user = await insertAccount(query);
+      }
     } catch (err) {
       // Another sign-up of the same address got in after the check above.
       if (err.code === UNIQUE_VIOLATION) return error(res, EMAIL_TAKEN, 409);
       throw err;
     }
 
-    await query(
-      `INSERT INTO user_preferences (user_id) VALUES ($1)`,
-      [result.rows[0].id]
-    );
-
-    const user = result.rows[0];
     const token = await sessionService().startSession({ user, method: 'email', platform: clientPlatform(req) });
 
     return created(res, { user, token }, 'Registration successful');
@@ -68,6 +96,29 @@ const EMAIL_TAKEN = 'Email already registered';
 
 /** An email address as stored at sign-up: trimmed and in lower case. */
 const normalizeEmail = (value) => String(value).trim().toLowerCase();
+
+/**
+ * Runs [work] in one transaction on a pooled client and returns its result.
+ * [work] receives the client's query function. Rolled back when it throws.
+ */
+const inTransaction = async (work) => {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const result = await work((text, params) => client.query(text, params));
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackErr) {
+      console.error('Register rollback failed:', rollbackErr);
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+};
 
 /**
  * The email account /login, /forgot-password and /verify-otp act on for the
@@ -311,8 +362,12 @@ const buildAuthHandlers = ({
     return { decoded };
   };
 
-  /** Inserts the user, their preferences row and the identity, in one transaction. */
-  const createAccount = async ({ name, email, phone, profileImage, provider, uid }) => {
+  /**
+   * Inserts the user, their preferences row, the identity and, when given,
+   * the [acceptance] of the Terms and Privacy Policy ({ versions, ip,
+   * userAgent }), in one transaction.
+   */
+  const createAccount = async ({ name, email, phone, profileImage, provider, uid, acceptance = null }) => {
     const client = await getClient();
     try {
       await client.query('BEGIN');
@@ -330,6 +385,15 @@ const buildAuthHandlers = ({
         'INSERT INTO user_identities (firebase_uid, user_id, provider) VALUES ($1, $2, $3)',
         [uid, user.id, provider]
       );
+      if (acceptance) {
+        await legalAcceptance.recordAcceptance((text, params) => client.query(text, params), {
+          userId: user.id,
+          versions: acceptance.versions,
+          method: legalAcceptance.METHODS[provider],
+          ip: acceptance.ip,
+          userAgent: acceptance.userAgent,
+        });
+      }
       await client.query('COMMIT');
       return user;
     } catch (err) {
@@ -407,7 +471,19 @@ const buildAuthHandlers = ({
           }
         }
 
-        // 3. A new account.
+        // 3. A new account. It must accept the Terms of Service and Privacy
+        // Policy first (services/legalAcceptance.js), asked before the name
+        // so a new phone account is asked once for each. A returning user
+        // (1. above) is never held up here: the app asks them to accept
+        // after signing in. An app from before acceptance (1.0.11 and
+        // earlier) sends neither field and makes the account as before,
+        // with nothing recorded; the current app sends both, null until the
+        // person has ticked the box, so it is asked here.
+        const acceptance = legalAcceptance.readAcceptance(req.body);
+        if (acceptance.status === 'refused') {
+          return legalAcceptance.refuseAcceptance(res, acceptance.code);
+        }
+
         const tokenName = isPlaceholderName(decoded.name) ? null : normalizeName(decoded.name);
         const givenName = isPlaceholderName(bodyName) ? null : normalizeName(bodyName);
         const name = (tokenName || givenName || '').slice(0, 255);
@@ -429,6 +505,9 @@ const buildAuthHandlers = ({
             profileImage: usablePhotoUrl(decoded.picture),
             provider,
             uid,
+            acceptance: acceptance.status === 'accepted'
+              ? { versions: acceptance.versions, ...legalAcceptance.evidenceFrom(req) }
+              : null,
           });
         } catch (err) {
           if (err.code !== UNIQUE_VIOLATION) throw err;

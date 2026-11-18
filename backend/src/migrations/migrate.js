@@ -15,6 +15,14 @@ const poolConfig = process.env.DATABASE_URL
 
 const runMigrations = async () => {
   const pool = new Pool(poolConfig);
+  // A migration that cannot do part of its work on the data it finds says so
+  // with RAISE WARNING (e.g. 033 when a constraint cannot be added yet). Only
+  // warnings are logged: IF NOT EXISTS reports a NOTICE on every boot.
+  pool.on('connect', (client) => {
+    client.on('notice', (msg) => {
+      if (msg.severity === 'WARNING') console.warn(`[Migrate] ${msg.message}`);
+    });
+  });
 
   try {
     console.log('[Migrate] Connecting to database...');

@@ -190,11 +190,41 @@ describe('deleteAccount', () => {
     assert.equal(h.frames.length, 0);
   });
 
+  // getStorage (config/firebase.js) returns admin.storage().bucket(): a
+  // Bucket, with name and file(), and no bucket() of its own. The fakes have
+  // that shape.
+  const fakeBucket = (name, onDelete) => ({
+    name,
+    file: (p) => ({ delete: async (options) => onDelete(p, options) }),
+  });
+
+  test('removes our own stored profile image from the bucket getStorage returns', async () => {
+    const deleted = [];
+    const h = build({
+      user: { id: USER_ID, role: 'user', password_hash: null, profile_image: `https://storage.googleapis.com/cw-bucket/profile_images/${USER_ID}_1.jpg` },
+      storage: fakeBucket('cw-bucket', (p, options) => { deleted.push({ p, options }); }),
+    });
+    const res = await del(h, { confirm: 'DELETE' });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(deleted, [{ p: `profile_images/${USER_ID}_1.jpg`, options: { ignoreNotFound: true } }]);
+  });
+
+  test('leaves an image outside our bucket alone', async () => {
+    const deleted = [];
+    const h = build({
+      user: { id: USER_ID, role: 'user', password_hash: null, profile_image: `https://storage.googleapis.com/other-bucket/profile_images/${USER_ID}_1.jpg` },
+      storage: fakeBucket('cw-bucket', (p) => { deleted.push(p); }),
+    });
+    const res = await del(h, { confirm: 'DELETE' });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(deleted, []);
+  });
+
   test('removes our own stored profile image and live locations, and survives their failure', async (t) => {
     const logged = [];
     t.mock.method(console, 'error', (...a) => logged.push(a.join(' ')));
     const removed = [];
-    const storage = { bucket: () => ({ name: 'cw-bucket', file: (p) => ({ delete: async () => { removed.push(p); throw new Error('storage down'); } }) }) };
+    const storage = fakeBucket('cw-bucket', (p) => { removed.push(p); throw new Error('storage down'); });
     const rtdb = { ref: (p) => ({ remove: async () => { removed.push(p); } }) };
     const h = build({
       user: { id: USER_ID, role: 'user', password_hash: null, profile_image: `https://storage.googleapis.com/cw-bucket/profile_images/${USER_ID}_1.jpg` },

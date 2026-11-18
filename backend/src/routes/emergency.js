@@ -10,6 +10,8 @@ const {
   resolveEmergency,
   acknowledgeEmergency,
   releaseEmergency,
+  addressEmergency,
+  cancelEmergency,
   updateAlertLocation,
   EMERGENCY_TYPES,
 } = require('../controllers/emergencyController');
@@ -58,6 +60,13 @@ router.get('/contact-alerts', listContactAlerts);
 router.get('/contact-alerts/:id', getContactAlert);
 
 router.get('/:id', getEmergencyStatus);
+
+// The person who raised an alert cancels it (desk status Cancelled).
+router.post('/:id/cancel', cancelEmergency);
+
+// The route the app 1.0.11 and older desk pages still call. It never records
+// "resolved": the sender's call cancels the alert, a responder's marks it
+// Addressed (controllers/emergencyController.js resolveEmergency).
 router.post('/:id/resolve', resolveEmergency);
 
 // The sender's phone sends where they are every 15 to 30 seconds while the
@@ -86,8 +95,10 @@ router.patch(
 );
 
 // The emergency desk: an operator takes an alert so no two answer the same
-// SOS, and can hand it back. Responders and admins only.
+// SOS (Acknowledged), can hand it back (Pending again), and marks it Addressed.
+// Responders and admins only.
 router.post('/:id/acknowledge', requireResponder, acknowledgeEmergency);
 router.post('/:id/release', requireResponder, releaseEmergency);
+router.post('/:id/address', requireResponder, addressEmergency);
 
 module.exports = router;

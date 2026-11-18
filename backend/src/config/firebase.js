@@ -1,6 +1,11 @@
 const admin = require('firebase-admin');
 
 let initialized = false;
+// firebase-admin throws ("Can't determine Firebase Database URL." / "Bucket
+// name not specified") when these services are asked for without their URL or
+// bucket, so they count as configured only when the variable is set.
+let hasDatabaseUrl = false;
+let hasStorageBucket = false;
 
 const initFirebase = () => {
   if (initialized) return true;
@@ -31,6 +36,8 @@ const initFirebase = () => {
     });
 
     initialized = true;
+    hasDatabaseUrl = Boolean(FIREBASE_DATABASE_URL);
+    hasStorageBucket = Boolean(FIREBASE_STORAGE_BUCKET);
     console.log('[Firebase] Initialized successfully');
     return true;
   } catch (err) {
@@ -39,8 +46,9 @@ const initFirebase = () => {
   }
 };
 
+/** Realtime Database, or null when Firebase or FIREBASE_DATABASE_URL is not set. */
 const getRealtimeDB = () => {
-  if (!initialized) return null;
+  if (!initialized || !hasDatabaseUrl) return null;
   return admin.database();
 };
 
@@ -55,8 +63,9 @@ const getAuth = () => {
   return admin.auth();
 };
 
+/** Storage bucket, or null when Firebase or FIREBASE_STORAGE_BUCKET is not set. */
 const getStorage = () => {
-  if (!initialized) return null;
+  if (!initialized || !hasStorageBucket) return null;
   return admin.storage().bucket();
 };
 

@@ -3,6 +3,7 @@ const notificationService = require('./notificationService');
 const { contactE164 } = require('../utils/phone');
 const { notBlockedBetween } = require('./blockService');
 const { displayName } = require('../utils/displayName');
+const { DESK_STATUS, deskStatusOf, isOpenDeskStatus, closedAtOf } = require('./emergencyStatus');
 
 /**
  * An emergency, seen by the sender's trusted contacts who use CaribWayz
@@ -56,8 +57,6 @@ const isTrustedContactNumber = (contacts, verifiedPhone) => {
 /** What a contact is called when the sender's account carries no name. */
 const UNNAMED_SENDER = 'Your contact';
 
-const sameUser = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
-
 const toCoordinate = (value) => {
   if (value === null || value === undefined) return null;
   const n = parseFloat(value);
@@ -73,13 +72,21 @@ const toIso = (value) => {
 /**
  * One alert as a trusted contact sees it.
  *
- * While it is active: where the sender is (the last position their phone
- * sent, or where they raised it) and when that was. Once it is resolved:
- * no position at all, only when the last one was taken, and whether the
- * sender closed it themselves.
+ * While it is open: where the sender is (the last position their phone
+ * sent, or where they raised it) and when that was. Once it is closed:
+ * no position at all, only when the last one was taken, and how it was
+ * closed (desk_status: cancelled by the sender, addressed by the desk, or
+ * resolved for an alert the desk closed before migration 033).
+ *
+ * status, resolved_at and resolved_by_sender are the fields the app 1.0.11
+ * reads, kept with their old meaning: status is 'active' or 'resolved' (open
+ * or closed), resolved_at is when it was closed, whichever way, and
+ * resolved_by_sender is whether the sender cancelled it. Newer clients read
+ * desk_status and closed_at.
  */
 const contactAlertView = (row) => {
-  const active = row.status === 'active';
+  const deskStatus = deskStatusOf(row);
+  const active = isOpenDeskStatus(deskStatus);
   const liveLat = toCoordinate(row.live_latitude);
   const liveLng = toCoordinate(row.live_longitude);
   const hasLive = liveLat !== null && liveLng !== null && row.live_located_at != null;
@@ -98,9 +105,11 @@ const contactAlertView = (row) => {
     id: row.id,
     type: row.type,
     status: active ? 'active' : 'resolved',
+    desk_status: deskStatus,
     created_at: toIso(row.created_at),
-    resolved_at: active ? null : toIso(row.resolved_at),
-    resolved_by_sender: !active && sameUser(row.resolved_by, row.user_id),
+    closed_at: toIso(closedAtOf(row)),
+    resolved_at: toIso(closedAtOf(row)),
+    resolved_by_sender: deskStatus === DESK_STATUS.CANCELLED,
     sender: {
       name: displayName(row.sender_name, UNNAMED_SENDER),
       phone: typeof row.sender_phone === 'string' && row.sender_phone.trim() !== '' ? row.sender_phone.trim() : null,
@@ -229,13 +238,22 @@ const buildContactAlertService = ({ query, notify }) => {
   };
 
   /**
-   * Tells the contacts of [alert], just resolved, that it is over and their
-   * view of the sender's position has stopped. [bySender] is whether the
-   * sender closed it themselves rather than the emergency desk.
+   * Tells the contacts of [alert], just closed, how it was closed, and that
+   * their view of the sender's position has stopped. [deskStatus] is the
+   * status it was closed with: cancelled (by the sender) or addressed (by the
+   * Emergency Desk). Each is named by its own word; neither is called
+   * "resolved", and an addressed alert never says the sender is safe.
+   *
+   * data.kind stays contact_alert_resolved, the kind the app 1.0.11 opens the
+   * alert for; data.desk_status says which it was.
    *
    * Never throws. Returns the number notified, or -1 on failure.
    */
-  const notifyContactsResolved = async (alert, { bySender }) => {
+  const notifyContactsClosed = async (alert, { deskStatus }) => {
+    if (deskStatus !== DESK_STATUS.CANCELLED && deskStatus !== DESK_STATUS.ADDRESSED) {
+      console.error(`Trusted contact close notification for alert ${alert && alert.id}: unexpected status ${deskStatus}`);
+      return -1;
+    }
     let senderName;
     let recipients;
     try {
@@ -251,26 +269,26 @@ const buildContactAlertService = ({ query, notify }) => {
       senderName = displayName(result.rows[0].sender_name, UNNAMED_SENDER);
       recipients = result.rows.map((row) => String(row.contact_user_id));
     } catch (err) {
-      console.error(`Trusted contact resolve notification failed for alert ${alert && alert.id}:`, err.message);
+      console.error(`Trusted contact close notification failed for alert ${alert && alert.id}:`, err.message);
       return -1;
     }
 
-    return notify(recipients, bySender
+    return notify(recipients, deskStatus === DESK_STATUS.CANCELLED
       ? {
           type: 'emergency',
           category: 'emergency',
-          title: `${senderName} is safe`,
-          message: `${senderName} marked themselves safe and cancelled the emergency alert. Their location is no longer shared with you.`,
+          title: `${senderName} cancelled their emergency alert`,
+          message: `${senderName} marked themselves safe and cancelled their emergency alert in CaribWayz. Emergency status: Cancelled. Their location is no longer shared with you.`,
           reference_id: alert.id,
-          data: { kind: 'contact_alert_resolved' },
+          data: { kind: 'contact_alert_resolved', desk_status: DESK_STATUS.CANCELLED },
         }
       : {
           type: 'emergency',
           category: 'emergency',
-          title: `${senderName}'s emergency was closed`,
-          message: `The CaribWayz emergency desk closed ${senderName}'s emergency alert. Their location is no longer shared with you.`,
+          title: `${senderName}'s emergency was marked Addressed`,
+          message: `The CaribWayz Emergency Desk marked ${senderName}'s emergency alert as addressed. Emergency status: Addressed. This does not confirm that help has arrived or that the emergency is over. Their location is no longer shared with you.`,
           reference_id: alert.id,
-          data: { kind: 'contact_alert_resolved' },
+          data: { kind: 'contact_alert_resolved', desk_status: DESK_STATUS.ADDRESSED },
         });
   };
 
@@ -300,10 +318,10 @@ const buildContactAlertService = ({ query, notify }) => {
     return true;
   };
 
-  return { findContactAccounts, notifyContactsOfAlert, notifyContactsResolved, recordVerifiedPhone };
+  return { findContactAccounts, notifyContactsOfAlert, notifyContactsClosed, recordVerifiedPhone };
 };
 
-const { findContactAccounts, notifyContactsOfAlert, notifyContactsResolved, recordVerifiedPhone } =
+const { findContactAccounts, notifyContactsOfAlert, notifyContactsClosed, recordVerifiedPhone } =
   buildContactAlertService({
     query: (text, params) => db.query(text, params),
     notify: (userIds, payload) => notificationService.notify(userIds, payload),
@@ -315,7 +333,7 @@ module.exports = {
   findContactAccounts,
   isTrustedContactNumber,
   notifyContactsOfAlert,
-  notifyContactsResolved,
+  notifyContactsClosed,
   recordVerifiedPhone,
   UNNAMED_SENDER,
 };

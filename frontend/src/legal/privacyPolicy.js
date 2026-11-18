@@ -1,293 +1,842 @@
-// The CaribWayz Privacy Policy, as the app shows it.
+// The CaribWayz Privacy Policy, shown at /privacy and in the app.
 //
 // Copied word for word from docs/legal/privacy-policy.md (the same text as
-// mobile/assets/legal/), which goes to the client's lawyer. Change it there
-// and copy it here; test/legal.test.js fails while the two differ.
+// mobile/assets/legal/), the client's final document of 17 November 2026.
+// Change it there and copy it here; test/legal.test.js fails while the two
+// differ.
 
 const privacyPolicy = `# CaribWayz Privacy Policy
 
-> DRAFT - pending legal review. This text has not yet been approved by a lawyer and may change before it takes effect.
+Version: 1.0
 
-Version: 0.5 (draft)
+Last updated: 18 November 2026
 
-Last updated: 13 November 2026
+CaribWayz — The Super App
 
-## 1. Who we are
+Effective Date: 18 November 2026
 
-CaribWayz is a navigation and road-safety app for Jamaica and the wider Caribbean. In this policy, "CaribWayz", "we", "us" and "our" mean CARIBWAYZ, a company registered in Jamaica under number 1626/2025, with its registered address at 18 Phoenix, Greater Portmore, Jamaica.
+Applies to: CaribWayz mobile applications, website, servers, administration systems and associated services.
 
-We decide how and why your personal information is used, so we are the "data controller" for it under Jamaica's Data Protection Act, 2020 and similar laws elsewhere in the Caribbean.
+## 1. WHO WE ARE
 
-You can contact us about anything in this policy at info@caribwayz.com. Our Data Protection Officer is Christina Baker, who you can reach at the same address.
+CaribWayz is a Caribbean navigation, road-safety, mobility and digital services platform serving Jamaica and the wider Caribbean.
 
-## 2. What this policy covers
+CaribWayz is a business name registered in Jamaica under registration number 1626/2025 and operated as a sole proprietorship.
 
-This policy explains what information the CaribWayz app for Android and iPhone, the CaribWayz servers it talks to, and the CaribWayz team collect about you, why, who we share it with, how long we keep it, and the choices and rights you have.
+For the purposes of this Policy, “CaribWayz”, “we”, “us” and “our” refer to Christina Baker, the proprietor trading as CaribWayz.
 
-We have written it to match what the app actually does. Where something stays on your phone and is never sent to us, we say so.
+The proprietor determines the purposes and means of processing personal information and acts as the data controller for the processing activities under her control, in accordance with applicable data protection legislation.
 
-## 3. The short version
+Business: CaribWayz
 
-- We use your location to give you maps, directions, nearby places, weather and road safety alerts.
-- Your live position is shared with other people only when you choose to: during a group trip, when you send an SOS (to the CaribWayz team, and in the app to your trusted contacts who use CaribWayz), or when you text your emergency contact.
-- Your recorded trips, recent searches, saved places and medical details stay on your phone. Your medical details leave your phone only if you switch on "Share medical info on emergency" and then send an SOS or crash alert.
-- We do not sell your information, we do not show adverts, and the app does not use advertising identifiers or analytics trackers.
-- You can download a copy of your data and delete your account from inside the app at any time.
+Business registration number: 1626/2025
 
-## 4. Information we collect
+Business structure: Sole proprietorship
 
-### 4.1 Your account
+Country of registration: Jamaica
 
-When you create an account we collect:
+Principal business address: 18 Phoenix, Greater Portmore, Jamaica
 
-- Your name.
-- Your email address, if you sign up with email, Google or Facebook. Accounts created with a phone number do not need an email address.
-- Your phone number, if you give it, or the number you sign in with.
-- Your password, if you sign up with email. We never store the password itself, only a scrambled version (a "hash") that cannot be turned back into it.
-- The kind of user you told us you are when you signed up.
-- Your profile photo, if you add one. If you sign in with Google or Facebook, we may use the profile photo from that account.
-- How you sign in (email, Google, Facebook or phone) and the identifier Firebase gives that sign-in, so we know which CaribWayz account it belongs to.
-- Whether your email address is verified, and the phone number you confirmed with a text message code the last time you signed in with your phone number. We record your email address as verified when Google or Facebook tell us they have verified it, or when you enter a password reset code we emailed to it. We use these so that group invitations and emergency alerts in the app reach only the person who owns that email address or phone number.
+General and privacy enquiries: info@caribwayz.com
 
-### 4.2 Your emergency contact
+Data Protection Officer: Christina Baker, info@caribwayz.com
 
-You can save up to five trusted contacts, as phone numbers, in your profile; the first is your emergency contact. They are stored with your account on our servers. CaribWayz never sends them a text message itself. When you choose to alert them, the app opens your own messaging app with a message ready, and nothing is sent until you press send.
+DPO contact: info@caribwayz.com
 
-If one of your trusted contacts has a CaribWayz account and confirmed that phone number in the app, they are also told in the app when you send an SOS or crash alert to the CaribWayz team (see section 4.7).
+## 2. PURPOSE AND SCOPE
 
-Because these are other people's phone numbers, please only save them if they are happy for you to do so.
+This Privacy Policy explains how CaribWayz collects, receives, uses, processes, stores, shares, protects and disposes of personal information.
 
-### 4.3 Your medical details
+It applies to:
 
-In Settings > Emergency Information you can record your blood type, allergies, medical conditions, medications, whether you are an organ donor, and emergency notes. These details are health information, which the law treats as sensitive.
+- Registered and unregistered users.
+- Individuals using navigation and mobility services.
+- Users accessing SOS and Emergency Desk functionality.
+- Authorised CaribOfficial responders.
+- Group navigation and location-sharing participants.
+- Business owners, representatives and membership holders.
+- Individuals contacting CaribWayz through its website or support channels.
+- Other individuals whose personal information is lawfully processed in connection with CaribWayz operations.
 
-- They are stored only on your phone.
-- They are sent to us only if you switch on "Share medical info on emergency" in Settings > Emergency Response (it is off until you turn it on) and you then send an SOS or a crash alert to the CaribWayz team. They are then added to that alert, so the person handling it can pass them to responders.
-- By switching that setting on, you give us your consent to receive and use these details for that purpose. You can switch it off at any time. Turning it off stops future sharing; it does not remove details already attached to an alert you sent.
-- Signing out or deleting your account removes them from your phone.
+This Policy covers the CaribWayz mobile application for Android and iOS, associated servers, databases, administration systems, website, business membership services and related digital operations.
 
-### 4.4 Your location
+It is intended to describe the actual operation of the Platform. Where information is stored locally on a user’s device and is not transmitted to CaribWayz, that distinction is identified.
 
-CaribWayz is a map app, so most of what it does depends on knowing where you are. Your phone asks your permission before the app can use your location, and you can change that permission at any time in your phone's settings.
+Where a particular feature, integration or service changes, this Policy will be updated where the change materially affects personal information processing.
 
-We use your location while the app is open to:
+## 3. DEFINITIONS
 
-- Show you on the map, plan routes and give turn-by-turn directions.
-- Find places and services near you, and look up the address of where you are.
-- Show weather for your area. Only an approximate position, rounded to about one kilometre, is sent to the weather service.
-- Warn you about road reports, storms and other hazards near you.
-- Show the emergency phone numbers for the country you are in.
+For this Policy:
 
-Location while the app is not on screen: CaribWayz never asks for "Allow all the time" location. If you turn on Navigation alerts (Settings > Notifications), then during a trip you started, CaribWayz keeps using your location while the app is not on screen, so turn-by-turn guidance and its alerts continue. Your phone shows a notification for as long as this is happening, and it stops when the trip ends. With Navigation alerts off, location use stops when you leave the app.
+**Personal Information:** Information relating to an identified or identifiable individual.
 
-Your location is sent to our servers only in these cases:
+**Sensitive Personal Data:** Personal information falling within a category requiring additional protection under applicable law.
 
-- Group trips. While you are in a group trip, your live position is sent to our servers and shown to the other members of that group, with your name and estimated arrival time. Only the latest position is kept; each update replaces the one before. It is removed when you leave the group or delete your account. The position you were at when you joined the group is also kept with your group membership.
-- SOS and crash alerts. When you send an alert to the CaribWayz team, your position at that moment is sent with it. While the alert is open, your position is also sent about every 20 seconds so your trusted contacts who use CaribWayz can follow it (see section 4.7).
-- Road reports. When you post a road report, the place you reported is stored with it.
-- Saved routes. When you save a route, its start and end points and addresses are stored with your account.
-- Member businesses. To show CaribWayz member businesses near you, on the map, in Businesses and while you drive, the app sends your position at that moment to our servers. It is used only to find the businesses near it and is not stored.
+**Data Subject:** The individual to whom personal information relates.
 
-We do not keep a record on our servers of everywhere you drive.
+**Data Controller:** The person or organisation determining the purposes and means of processing personal information.
 
-### 4.5 Information that stays on your phone
+**Data Processor:** An organisation or individual processing personal information on behalf of a data controller.
 
-The following is kept only on your phone. We never receive it, except where you choose to send it to us (for example by sharing your data download with us):
+**Processing:** Includes collecting, recording, storing, retrieving, using, sharing, transmitting, altering, restricting or deleting personal information.
 
-- Recorded trips: your most recent 100 trips, with distance, duration, speeds and your Safe Driving Score. Where each trip ended is kept only while "Save location history" is on.
-- Your recent searches and saved places.
-- Your medical details (see section 4.3).
-- Your app settings, including the app lock setting.
+**Location Data:** Information identifying or indicating the geographical position or movements of an individual or device.
 
-You can clear your recent searches and recorded trips at any time with Settings > Privacy & Security > Delete History. Signing out or deleting your account clears everything the app has stored on that phone.
+**Emergency Information:** Information submitted or generated through SOS, crash alerts, Emergency Desk or related safety functions.
 
-### 4.6 Road reports
+**Platform:** The CaribWayz application, website, software, administration systems and associated digital services.
 
-When you post a road report (for example an accident, police check, flood or pothole), we store its type, location, severity, any description you add, and the time. Other drivers see the report and where it is, but not your name. Our administrators can see which account posted a report, so they can deal with misuse. We also record when you confirm someone else's report.
+**Third-Party Provider:** An independent organisation supplying technology, infrastructure or other services used in connection with CaribWayz.
 
-### 4.7 Emergency alerts
+## 4. INFORMATION WE COLLECT
 
-When you send an SOS or a crash alert to the CaribWayz team, we store:
+The information collected depends on the features used, permissions granted, information voluntarily submitted and applicable legal requirements.
 
-- The type of emergency, your location, the time, and anything you typed, such as what happened and the address.
-- Your medical details, if you switched on "Share medical info on emergency".
-- Whether you also asked for your emergency contact to be alerted.
-- The progress of the alert: when a team member took it, who took it, and when and by whom it was closed.
+### 4.1 Account and Profile Information
 
-The people who handle alerts see your name and phone number with the alert, so they can reach you.
+We may collect:
 
-Your trusted contacts who use CaribWayz. When you send an SOS or crash alert to the CaribWayz team, each of your trusted contacts who has a CaribWayz account and a phone number they confirmed in the app is also notified in the app. Until you mark yourself safe ("I'm safe") or the alert is closed, they can open it and see your live location, your name, the type of emergency and the phone number you confirmed in the app. While the alert is open and CaribWayz is open on your phone, the app sends your location to our servers about every 20 seconds, for up to two hours, and each update replaces the one before. When the alert closes, sending stops and your location is no longer shown to them; for one day afterwards they can still see that the alert was closed, without your location. Someone you take off your trusted contacts, or have blocked, can no longer open it. We keep with the alert the last location your phone sent and a record of which accounts were notified (see section 8).
+- Full name.
+- Username or account identifier.
+- Email address, where provided or required by the chosen registration method.
+- Telephone number.
+- Date of birth, where required.
+- Profile photograph.
+- User category or account type.
+- Sign-in method, including email, Google, Facebook or telephone number.
+- Firebase Authentication identifier.
+- Email and telephone verification status.
+- Account preferences and settings.
+- Identity verification information, where applicable.
 
-If your phone detects a likely crash or you shake it to ask for help, the motion readings are checked on your phone only. Nothing is sent unless the countdown ends or you choose to send help. Your phone keeps a list of its last 50 detections (time, what was detected, what happened next, and the place if "Save location history" is on) so you can include one in an insurance report. This list stays on your phone and is included when you download your personal data.
+Where password-based registration is used, passwords are stored in protected cryptographic form rather than as readable text.
 
-### 4.8 Incident records
+Where Google or Facebook sign-in is selected, the relevant provider may supply account information permitted by the user’s authorization.
 
-If you log an incident (for example a collision), we store the details you enter: the type, severity, description, where and when it happened, the parish, the cause, a police report number, the other party's name, contact and vehicle, and witness information. Photos you add stay on your phone and are not uploaded.
+### 4.2 Location and Navigation Information
 
-Incident records often contain other people's details. Please only enter what you need, and only what you are entitled to share.
+When location-dependent services are used, we may process:
 
-### 4.9 Group trips
+- GPS coordinates.
+- Current or approximate geographical location.
+- Starting points and destinations.
+- Route information and stops.
+- Estimated arrival times.
+- Navigation and travel information.
+- Location timestamps.
+- Group-trip positions.
+- Location-sharing records.
+- Information necessary to provide nearby-place searches and road-safety alerts.
 
-When you create or join a group, we store the group's name, its join code, its destination, who is in it and when they joined. Other members see your name, profile photo, live position and arrival time during the trip.
+Location collection depends on the feature, device permissions and settings.
 
-If you invite someone by email, we send that person one email with the group name, your name and the join code. We do not keep their email address afterwards. If the address belongs to a CaribWayz account whose email address is verified (see section 4.1), that person also sees the invitation in the app, with your name and the group name, and can join or decline it there. We keep a record of the invitation: who invited whom, to which group, and whether it was accepted, declined or has expired. An invitation not answered within 7 days expires.
+Background location access will only be used where the relevant feature requires it and the appropriate device permission has been granted.
 
-When you send a group SOS or check in, the other members get a notification with your name and the group name.
+### 4.3 Emergency and SOS Information
 
-During a group drive, the other members also get a notification when you arrive at the destination, stop on the way, are running late (with about how late) or end the drive or leave the group. These notifications carry your name and the group name, not your location. Your phone works these out from your location; our servers keep only which of these was last shared and when, not where you were.
+When an SOS or crash alert is submitted, we may collect:
 
-### 4.10 Notifications
+- Emergency category.
+- Incident description.
+- Submitted location and coordinates.
+- Date and time of the request.
+- Request identification number.
+- Emergency status.
+- Relevant communications and notifications.
+- Request assignment and handling records.
+- The identity of the authorised team member handling the request.
+- Cancellation and closure information.
+- Medical information where the emergency-sharing setting has been enabled.
+- Other relevant information voluntarily supplied.
 
-To send you push notifications, we store a code that identifies the app on your phone (a "push token"), whether your phone is Android or iPhone, and which kinds of notification you want. We also keep the notifications we have sent you, so you can see them in the app. Promotional notifications are off unless you turn them on.
+Emergency information may contain sensitive personal information concerning health, injury, criminal incidents or other circumstances requiring assistance.
 
-### 4.11 Password reset
+Access is restricted to authorised personnel and designated recipients with a legitimate operational purpose.
 
-If you ask to reset your password, we email you a six-digit code. We store only a scrambled version of the code, with an expiry time and a count of attempts, so it cannot be guessed or reused.
+### 4.4 Trusted and Emergency Contacts
 
-### 4.12 Camera, photos and Face ID or fingerprint
+Users may save up to five trusted contacts using their telephone numbers, with the first designated as the emergency contact.
 
-The app uses your camera or photo library only when you choose to take or pick a photo, for your profile or for an incident record. Only your profile photo is uploaded.
+Where the current application design is used:
 
-If you turn on the app lock, your phone checks your face, fingerprint or passcode itself. CaribWayz never receives your biometric data.
+- Contact numbers are stored with the user’s account on CaribWayz servers.
+- CaribWayz does not independently send SMS messages to these contacts.
+- When the user chooses to send an emergency text, the application opens the device’s messaging application with a prepared message.
+- The message is sent only when the user initiates the sending process.
+- Trusted contacts who have CaribWayz accounts and verified telephone numbers may receive in-app emergency notifications where the applicable feature is enabled.
 
-### 4.13 Member business announcements
+The privacy practices of external messaging providers also apply to messages transmitted through their services.
 
-During a trip, the app can say the name of a CaribWayz member business you are close to, with any offer it is running, and ask whether to add it to your route. This is decided on your phone; we are not told whether you heard it or added the business. You can turn it off in Settings > Allow Local Business Notifications.
+### 4.5 Information Stored Locally on Your Device
 
-### 4.14 Businesses that apply to become members
+Certain information may remain on the user’s device rather than being transmitted to CaribWayz servers.
 
-When a business applies for membership on the CaribWayz website, we collect the business's registered name and any trading name, its category, description, address, location on the map, telephone number, email address and website or social media link; the name, position, phone number and email address of the owner or representative who applies; the number of employees; any message they send; and when they accepted the Business Membership Policy and the Terms. We use these to deal with the application, invoice the yearly fee and, once the membership is active, list the business in the app. The business's trading name (or registered name), category, address, phone number, website, description and current offer are shown to app users; the representative's details, the business email address and the number of employees are not. The representative can ask us to correct or delete these details at any time.
+Under the current documented application design, this includes:
 
-### 4.15 Technical information
+- Recorded trips.
+- Recent searches.
+- Saved places.
+- Emergency medical information before it is expressly shared.
+- Local crash and motion-detection records.
+- Incident photographs.
+- Other locally maintained application information.
 
-Like any online service, our servers and the services we use receive technical information when your phone connects to them, such as your IP address and the time of the request. We use it to run the service, keep it secure and limit abuse. When something goes wrong on our servers, we record the error and the account it affected, so we can fix it.
+Local information may be accessible to the user through the application and may be included in a personal-data download where supported.
 
-We do not use advertising identifiers, analytics or tracking tools, or a crash-reporting service in the app.
+Information stored locally is not otherwise available to CaribWayz unless the user chooses to transmit or share it.
 
-## 5. Why we use your information, and our legal basis
+Signing out, clearing application history, deleting an account or uninstalling the application may affect locally stored information. The exact outcome depends on the application implementation and device operating system.
 
-- To provide the service you asked for: your account, maps, directions, searches, group trips, road reports, incident records, notifications, data download and account deletion. We rely on this being necessary to provide the service under our Terms of Service.
-- To handle emergencies: to receive and act on SOS and crash alerts you send, and to let your trusted contacts who use CaribWayz know and follow your location until you are safe. We rely on your request and, where your life or health may be at risk, on protecting your vital interests.
-- To use your medical details in an emergency: we rely on your explicit consent, given when you switch on "Share medical info on emergency".
-- To use your location while the app is not on screen during a trip: we rely on your consent, given by turning on Navigation alerts and through your phone's location permission.
-- To keep CaribWayz safe and working: preventing misuse, securing accounts, fixing faults and dealing with harmful road reports. We rely on our legitimate interest in running a safe service.
-- To deal with membership applications and list member businesses: we rely on the business's request and on the contract for its membership.
-- To send promotional notifications: only with your consent, which you can withdraw in Settings > Notifications.
-- To meet our legal obligations, and to respond to lawful requests from the authorities.
+### 4.6 Road Reports and Hazard Information
 
-We do not use your information to make decisions about you by automated means alone that have legal or similarly significant effects on you.
+When users submit road reports, CaribWayz may collect:
 
-## 6. Who we share your information with
+- Report type.
+- Reported geographical location.
+- Severity or category.
+- Description.
+- Date and time of submission.
+- Confirmation or update information from other users.
 
-We do not sell your personal information, and we do not share it with advertisers.
+Road reports may be displayed to other drivers to support road awareness and safety.
 
-### 6.1 People you choose to share with
+A user’s name is not intended to appear publicly alongside a road report. Authorised administrators may identify the submitting account for moderation, security or investigation purposes.
 
-- Your group, during a group trip (see section 4.9), including when you arrive, stop, are running late or leave.
-- The CaribWayz emergency team and the emergency responders we approve, when you send an SOS or crash alert. They can see your name, phone number, location, what you told us and, if you allowed it, your medical details. They may pass this to the police, fire or ambulance service to get you help.
-- Your emergency contact, when you send them a text message from your phone.
-- Your trusted contacts who have a CaribWayz account and a phone number they confirmed in the app, when you send an SOS or crash alert to the CaribWayz team. Until you mark yourself safe or the alert closes, they see your live location, your name, the type of emergency and the phone number you confirmed in the app (see section 4.7).
-- Other drivers, who see your road reports without your name.
-- People you invite to a group by email, and, in the app, the CaribWayz account with that verified email address.
+Reports may expire, be updated, removed or disappear from public display while associated records remain for legitimate operational, safety or legal purposes.
 
-### 6.2 Companies that run parts of the service for us
+### 4.7 Crash and Motion Detection
 
-These companies process information on our behalf, or provide services the app connects to directly:
+Where crash detection or shake-based emergency functionality is available:
 
-- Render (Render Services, Inc.), which hosts our servers, our database and our administration website.
-- Google, through Firebase: Firebase Authentication (including the text message codes for phone sign-in), Firebase Realtime Database (live group positions), Cloud Storage for Firebase (profile photos) and Firebase Cloud Messaging (push notifications). On iPhone, push notifications are delivered through Apple's notification service.
-- Google Sign-In, if you sign in with Google, and Meta (Facebook Login), if you sign in with Facebook. They tell us your name, email address and profile photo with your permission.
-- Google Maps Platform, which receives search text and locations for some place searches, address look-ups and directions.
-- OpenStreetMap services, which provide the map and receive the map area you are looking at, place searches and locations: the OpenStreetMap Foundation's map tile and address look-up (Nominatim) servers; Photon, run by Komoot, for place search; public Overpass servers for nearby places (overpass-api.de, overpass.openstreetmap.fr, maps.mail.ru and overpass.private.coffee); OpenTopoMap, if you choose the terrain map; and the OSRM routing server (router.project-osrm.org), which receives the start, end and stops of a route to work it out.
-- The Norwegian Meteorological Institute (api.met.no), which provides weather and receives your approximate location.
-- [Email service provider], which sends our emails, such as password reset codes and group invitations.
+- Relevant device motion readings may be processed locally.
+- Motion readings are not transmitted merely because a possible detection occurs.
+- Information is transmitted when the user sends an emergency request or an automated alert is submitted through the applicable feature.
+- The application may maintain a local record of recent detections, including detection time, type, resulting action and location where location history is enabled.
 
-The app also downloads public storm, earthquake and tsunami information from the United States National Hurricane Center, the National Oceanic and Atmospheric Administration and the United States Geological Survey. Only technical connection information, such as your IP address, is sent to them.
+The current documented implementation maintains the most recent fifty detection records locally.
 
-When you open a map link in an emergency message, or hand navigation to another app, that app's own privacy policy applies.
+These records may be included in a personal-data download where supported.
 
-### 6.3 When the law requires it, or to protect people
+### 4.8 Incident Records
 
-We may share information when the law requires it, to respond to a valid request from a court, the police or a regulator, to protect someone's life or safety, or to protect our rights and those of our users.
+Where users create incident records, information may include:
 
-### 6.4 If the business changes hands
+- Incident type and severity.
+- Description.
+- Location and date.
+- Parish or geographical area.
+- Reported cause.
+- Police report number, if provided.
+- Names and contact details of other parties.
+- Vehicle information.
+- Witness information.
 
-If CaribWayz is sold or merged, your information may pass to the new owner, who must continue to protect it as this policy describes. We will tell you before that happens.
+Incident records may contain information about individuals other than the account holder. Users must only submit information they are lawfully entitled to provide.
 
-## 7. Information sent outside Jamaica
+Under the documented current application design, incident photographs remain on the user’s device and are not uploaded to CaribWayz servers.
 
-Our servers and the companies listed in section 6.2 are located outside Jamaica, including in the United States and Europe. Our hosting is in [Hosting region], and Firebase stores data in [Firebase data location].
+### 4.9 Group Trips and Invitations
 
-When we send your information abroad, we take steps so that it stays protected to the standard Jamaican law requires, for example by choosing providers who commit to protecting it by contract. You can ask us for more information about these safeguards.
+When users create or join group trips, CaribWayz may process:
 
-## 8. How long we keep your information
+- Group name.
+- Join code.
+- Destination.
+- Participating accounts.
+- Membership and invitation records.
+- Join dates and times.
+- Group status information.
 
-- Your account and everything linked to it on our servers (profile, emergency contact, preferences, saved routes, road reports, emergency alerts, incident records, group memberships, notifications and push tokens) are kept until you delete your account.
-- Road reports disappear from the map when they expire, but stay linked to your account until you delete it.
-- Your live group position is replaced with every update, and is removed when you leave the group or delete your account.
-- The last location your phone sent during an emergency alert stays with the alert after it closes, though your trusted contacts can no longer see it, and is deleted with the alert when you delete your account. The record of which trusted contacts were notified is kept with the alert in the same way, and a contact's entry is also removed if they delete their account.
-- Group invitations, and the record of which group status was last shared and when, are kept until the group or the account is deleted.
-- Password reset codes stop working after they expire.
-- Server error records are kept for [Server log retention period].
-- Copies in backups, where our hosting provider keeps them, are removed within [Backup retention period].
-- Information on your phone stays there until you delete it, sign out, delete your account or uninstall the app.
+During an active group trip, participating members may see one another’s name, profile photograph, live location and estimated arrival time.
 
-We may keep some information for longer if the law requires it, or if it is needed to deal with a legal claim or a safety investigation. If so, we keep only what is needed and delete it when it is no longer needed.
+Email invitations may contain the group name, inviting user’s name and join code.
 
-## 9. Your rights and choices
+Under the documented design, unanswered invitations expire after seven days. Invitation records may identify the inviter, recipient, group and invitation outcome.
 
-Under Jamaica's Data Protection Act, 2020, and similar laws in other Caribbean countries, you have the right to:
+Group notifications may include arrival, stop, delay, group SOS, safe-arrival confirmation and departure information.
 
-- Get a copy of the personal information we hold about you. You can do this yourself with Settings > Privacy & Security > Download Personal Data, which gives you a file with your account data and the data stored on your phone.
-- Have inaccurate information corrected. You can change most of your details in Settings > Account & Profile.
-- Have your information deleted, by deleting your account (see section 10).
-- Withdraw your consent at any time, for example by turning off "Share medical info on emergency", location permission or promotional notifications. This does not affect what we did before you withdrew it.
-- Ask us to stop using your information in a way that is causing, or is likely to cause, you damage or distress.
-- Ask us not to use your information for direct marketing.
-- Complain to the regulator. In Jamaica this is the Office of the Information Commissioner. In other countries, contact your local data protection authority.
+For certain status notifications, CaribWayz servers retain the latest shared status and the time it was shared rather than the precise location where the event occurred.
 
-To use any of these rights, contact us at info@caribwayz.com. We may need to confirm who you are first. We will answer within 30 days.
+### 4.10 Notifications and Push Tokens
 
-## 10. Deleting your account
+To deliver notifications, CaribWayz may process:
 
-You can delete your account inside the app: go to Settings > Account & Profile and press Delete Account. If your account has a password, you will be asked for it.
+- Device push token.
+- Device operating system.
+- Notification preferences.
+- Relevant notification records.
+- Delivery-related information.
 
-When you delete your account, we delete from our servers your profile and profile photo, emergency contact, preferences, saved routes, road reports and confirmations, emergency alerts, incident records, group memberships, notifications, push tokens and your live group position. Groups you created are deleted too, and their members are told. The app also clears everything it stored on that phone.
+Promotional notifications are disabled unless users choose to enable them, where that preference is available.
 
-Deletion cannot be undone. Messages other people have already received, such as a text you sent your emergency contact or a group notification, cannot be recalled.
+Essential account, safety, transaction and emergency notifications may continue where necessary to provide the requested service.
 
-If you cannot use the app, email info@caribwayz.com from the email address on your account, or tell us the phone number you sign in with, and we will delete your account for you.
+### 4.11 Password Resets and Account Security
 
-Administrator accounts cannot be deleted from the app. They are removed by another administrator.
+Where password-reset functionality is used, CaribWayz may send a temporary verification code to the registered email address.
 
-## 11. How we protect your information
+Associated security records may include a protected version of the code, expiry information and attempt records.
 
-We protect your information with measures that include:
+These records are used to prevent unauthorised account access and are retained only as long as reasonably necessary.
 
-- Encrypted connections between the app and our servers.
-- Passwords and reset codes stored only in scrambled (hashed) form.
-- Access to emergency alerts limited to the CaribWayz team and responders we have approved.
-- An optional app lock using your phone's face, fingerprint or passcode check.
+### 4.12 Camera, Photographs and Device Authentication
 
-No system is perfectly secure. If a security breach puts your information at risk, we will tell you and the Information Commissioner as the law requires.
+The application may access the camera or photo library when users choose to take or select photographs.
 
-## 12. Children
+Under the documented application design:
 
-CaribWayz is not intended for anyone under 18, and we do not knowingly collect information about children. If you believe a child has given us information, contact us and we will delete it.
+- Profile photograph upload is not currently available, so profile photographs are not uploaded to CaribWayz servers.
+- Incident photographs remain on the user’s device.
+- Device-based face, fingerprint or passcode authentication for an application lock is performed by the device.
 
-## 13. Changes to this policy
+CaribWayz does not receive or store the user’s biometric template through the documented application-lock process.
 
-We may update this policy when the app or the law changes. We will show the new version in the app with its date, and if a change is significant we will tell you before it takes effect.
+### 4.13 Business Membership Information
 
-## 14. Contact us
+Business membership applications may involve the collection of:
 
-CARIBWAYZ
+**Business information**
 
-18 Phoenix, Greater Portmore, Jamaica
+- Registered or trading name.
+- Business category and description.
+- Registration details.
+- Physical business address and map location.
+- Telephone number.
+- Business email.
+- Website or social media links.
+- Number of employees.
+- Supporting documents.
+
+**Representative information**
+
+- Name.
+- Position or role.
+- Telephone number.
+- Email address.
+- Authorisation or verification information.
+
+**Membership and transaction information**
+
+- Requested membership category.
+- Application date and status.
+- Membership approval records.
+- Subscription details.
+- Fees, invoices and payment records.
+- Verification and administrative records.
+
+Approved public business listings may display the business name, category, address, telephone number, website, description and current offers.
+
+Private representative contact information and declared employee numbers are not intended for public display.
+
+### 4.14 Technical and Security Information
+
+When devices connect to CaribWayz servers, technical information may include:
+
+- IP address.
+- Date and time of connection.
+- Device or operating system information.
+- Technical request information.
+- Authentication identifiers.
+- Error and diagnostic information.
+- Security and service-related records.
+- Records of your acceptance of the Terms of Agreement and this Privacy Policy: the document versions accepted, the date and time, how you signed up, and the IP address and device information at that moment.
+
+This information supports application operation, account security, technical troubleshooting, protection against misuse and, for acceptance records, evidence that the Terms of Agreement and this Privacy Policy were accepted.
+
+### 4.15 Cookies, Analytics and Advertising
+
+Website cookies and similar technologies may be used where necessary for functionality, preferences and security.
+
+CaribWayz’s documented current mobile application design does not use advertising identifiers, in-app advertising trackers, separate analytics trackers or a separate crash-reporting service.
+
+CaribWayz does not sell personal information or share personal information with advertisers for targeted advertising.
+
+If analytics, advertising technology, cookies or additional tracking services are introduced, this Policy will be updated and any required consent or privacy choices will be implemented before the relevant processing begins.
+
+## 5. HOW WE COLLECT INFORMATION
+
+Information may be obtained through:
+
+- Direct registration and account submissions.
+- User-selected application features.
+- Device permissions and GPS functionality.
+- SOS and Emergency Desk submissions.
+- Group-trip participation.
+- Road and incident reports.
+- Business membership applications.
+- Communications and support requests.
+- Authorised responders and participating organisations.
+- Third-party authentication, mapping and technology providers.
+- Lawful verification and regulatory processes.
+
+Where information is obtained indirectly, appropriate privacy information will be provided as required by law.
+
+## 6. WHY WE USE PERSONAL INFORMATION
+
+CaribWayz uses personal information for specified and lawful purposes, including:
+
+1. Creating, authenticating and managing accounts.
+
+2. Providing navigation, route guidance and location services.
+
+3. Supporting group travel and authorised location sharing.
+
+4. Receiving and managing SOS and crash alerts.
+
+5. Facilitating emergency communication and authorised responder access.
+
+6. Managing road reports and safety information.
+
+7. Administering business accounts, verification and memberships.
+
+8. Processing payments, refunds and eligible payouts.
+
+9. Providing customer support and responding to complaints.
+
+10. Maintaining security and preventing fraud or misuse.
+
+11. Diagnosing technical problems and improving service reliability.
+
+12. Sending service notifications and, where authorised, promotional communications.
+
+13. Meeting legal, regulatory and contractual obligations.
+
+14. Establishing, exercising or defending legal claims.
+
+Personal information will not be used for unrelated purposes without an appropriate lawful basis.
+
+## 7. LEGAL BASIS FOR PROCESSING
+
+CaribWayz will identify an appropriate legal basis and, where necessary, an additional condition for processing sensitive personal data under applicable law.
+
+Depending on the circumstances, processing may rely on:
+
+- Consent.
+- Necessity to provide a requested service or perform a contract.
+- Compliance with legal obligations.
+- Protection of vital interests.
+- Public interest or lawful official authority.
+- Other lawful grounds recognised by applicable legislation.
+
+Emergency medical information will only be processed under the applicable lawful condition. Where consent is the basis, the relevant consent must be obtained separately and appropriately.
+
+Consent to one feature does not constitute unlimited permission for unrelated processing.
+
+Where consent is withdrawn, processing already lawfully undertaken is not retrospectively invalidated.
+
+## 8. LOCATION DATA AND LOCATION SHARING
+
+Location information is fundamental to several CaribWayz features.
+
+Users may grant or withdraw device-level location permissions through their device settings.
+
+Location information may be processed while the application is active and, where a specific feature requires it, in the background with appropriate authorisation.
+
+Location information may be shared with:
+
+- Other members of a group trip.
+- Authorised CaribWayz emergency personnel.
+- Designated trusted contacts.
+- Approved responders or participating emergency organisations.
+- Other recipients where lawfully required or authorised.
+
+Location information will not become publicly available simply because GPS access is enabled.
+
+Users should understand that disabling location permissions may limit navigation, group sharing, SOS and other location-dependent functions.
+
+## 9. EMERGENCY INFORMATION AND RESPONDER ACCESS
+
+Emergency information may be made available to:
+
+- Authorised CaribOfficial users.
+- Approved emergency responders.
+- Relevant participating response organisations.
+- CaribWayz personnel responsible for emergency administration.
+- Technical or security personnel with authorised access.
+- Competent authorities where disclosure is lawful or required.
+
+Access must be limited to legitimate purposes and appropriate authorisation.
+
+CaribWayz may maintain responder-access records and emergency handling logs for security, accountability and legal compliance.
+
+Emergency information is not unrestricted public information and is not sold or disclosed to advertisers for targeted marketing.
+
+Further conditions are set out in the Emergency Desk Disclaimer.
+
+## 10. WHEN WE SHARE PERSONAL INFORMATION
+
+CaribWayz may disclose information in the following circumstances:
+
+### 10.1 Service providers
+
+To providers supporting hosting, authentication, mapping, messaging, notifications, payment processing, technical maintenance and security.
+
+### 10.2 Group participants
+
+To members of a group trip in accordance with the user’s participation and sharing settings.
+
+### 10.3 Emergency recipients
+
+To authorised emergency personnel, designated contacts and participating response organisations where necessary for the requested emergency function.
+
+### 10.4 Businesses and service providers
+
+Where necessary to facilitate a transaction, enquiry, membership, booking or other service expressly requested by the user.
+
+### 10.5 Legal and regulatory authorities
+
+Where required or permitted by applicable law, court order or lawful request.
+
+### 10.6 Business transfer
+
+Where CaribWayz undergoes a lawful sale, restructuring or transfer of business operations, subject to applicable data-protection requirements.
+
+### 10.7 User authorisation
+
+Where the individual has expressly authorised the relevant disclosure or another lawful basis applies.
+
+Disclosures will be limited to information reasonably necessary for the relevant purpose.
+
+## 11. THIRD-PARTY TECHNOLOGY PROVIDERS
+
+The following providers have been identified in CaribWayz’s documented application architecture. The actual production integrations and processing locations must be kept current.
+
+**Render (Render Services, Inc.)**
+
+Hosting of CaribWayz servers, databases and administration website.
+
+**Google Firebase**
+
+Services identified include:
+
+- Firebase Authentication.
+- Firebase Cloud Messaging.
+
+**Email delivery provider (SMTP)**
+
+Delivers emails containing password-reset codes, two-step sign-in codes and group invitations to the recipient’s email address.
+
+**Apple**
+
+Apple’s notification service may be used to deliver push notifications on iOS devices.
+
+**Google Sign-In and Meta/Facebook Login**
+
+May supply account information when a user chooses the relevant authentication method.
+
+**Google Maps Platform**
+
+May receive search text, address information and location information for supported place searches, address look-ups and directions.
+
+**OpenStreetMap-related services**
+
+Depending on the feature, information may be transmitted to:
+
+- OpenStreetMap Foundation map-tile services.
+- Nominatim.
+- Photon, operated by Komoot.
+- Public Overpass servers.
+- OpenTopoMap.
+- OSRM routing services.
+
+**MET Norway (Norwegian Meteorological Institute)**
+
+Receives approximate coordinates, rounded to about one kilometre, to provide weather information.
+
+Information sent to mapping and routing providers may include search terms, starting points, destinations and stops required to provide the selected service.
+
+Third-party providers may operate under their own privacy policies and service conditions. Where they process personal information on behalf of CaribWayz, appropriate data-processing and security arrangements must be maintained.
+
+## 12. INTERNATIONAL DATA TRANSFERS
+
+CaribWayz is established in Jamaica and may provide services throughout the Caribbean.
+
+Some service providers and infrastructure may store or process information outside Jamaica, including in the United States and Europe.
+
+The following production details must be confirmed and kept updated:
+
+- CaribWayz hosting region: Render, United States (Oregon, US West).
+- Firebase database and storage locations: CaribWayz does not currently use a Firebase database or Cloud Storage for Firebase. Firebase Authentication and Firebase Cloud Messaging process data in the United States.
+- Other material processing locations: Emails containing password-reset codes, two-step sign-in codes and group invitations are sent through our email delivery provider (SMTP), United States. Search text, addresses and coordinates sent to the map, search, routing and weather providers named in section 11 are processed on those providers’ own servers, in the United States, Europe or elsewhere, depending on the provider.
+
+Personal information will not be transferred outside Jamaica unless the transfer satisfies the applicable requirements of the Jamaica Data Protection Act, 2020 and other relevant legislation.
+
+Where required, CaribWayz will assess the adequacy of the receiving jurisdiction and implement an applicable lawful transfer mechanism or safeguard.
+
+Users may contact us for further information concerning relevant international processing arrangements.
+
+## 13. DATA RETENTION AND DISPOSAL
+
+CaribWayz retains personal information only for as long as reasonably necessary for the purposes for which it was collected, subject to legal, regulatory, safety, security and dispute-resolution requirements.
+
+The following retention principles apply:
+
+**Account and profile information:** Retained while the account is active and deleted or anonymised following account deletion, subject to lawful retention requirements.
+
+**Trusted contacts and preferences:** Retained while associated with the account and deleted or anonymised following account deletion, subject to lawful retention requirements.
+
+**Saved routes and local history:** Locally stored information remains subject to the device and application controls described in this Policy.
+
+**Road reports:** May be removed from public display when expired or taken down. Associated records may be retained for legitimate safety, security and dispute purposes.
+
+**Group-trip information:** Live positions are updated during active sharing and removed when sharing ends or the applicable group/account is deleted, subject to necessary records.
+
+**Emergency alerts:** The last location received may remain attached to the alert after closure. Records of notified contacts and emergency handling may be retained for legitimate safety, legal and accountability purposes.
+
+**Technical and server logs:** Retained for 7 days.
+
+**Backups:** Retained for 3 days, according to the actual hosting and backup arrangements.
+
+**Business membership records:** Retained for the duration of the membership and any additional period required for accounting, tax, contractual, legal or dispute-resolution purposes.
+
+**Payment records:** Retained in accordance with applicable financial, tax and legal requirements.
+
+**Information stored locally:** Remains on the device until removed through the application, device settings, account deletion or other applicable device processes.
+
+Information no longer required will be securely deleted, destroyed or anonymised, subject to applicable legal obligations and lawful preservation requirements.
+
+## 14. DATA SECURITY
+
+CaribWayz will implement appropriate technical and organisational measures to protect personal information against unauthorised access, unlawful processing, accidental loss, destruction, alteration or disclosure.
+
+Depending on the system and information involved, measures may include:
+
+- Encrypted communications.
+- Protected password storage.
+- Authentication and access controls.
+- Role-based responder permissions.
+- Restricted administrative access.
+- Audit logs.
+- Secure storage and transmission.
+- Backup and recovery procedures.
+- Security assessments and testing.
+- Confidentiality obligations for personnel and contractors.
+- Vendor security reviews.
+- Incident detection and response procedures.
+
+Access to personal information will be restricted to authorised persons with a legitimate operational requirement.
+
+No electronic system or transmission method can be guaranteed to be completely secure.
+
+Users are responsible for protecting their devices and account credentials and should report suspected account compromise promptly.
+
+## 15. DATA BREACHES AND SECURITY INCIDENTS
+
+CaribWayz will maintain procedures for identifying, investigating, containing, documenting and responding to personal-data breaches and relevant security incidents.
+
+Where a breach or contravention triggers reporting obligations under Jamaica’s Data Protection Act, 2020 and applicable regulations, CaribWayz will:
+
+1. Report the relevant breach or contravention to the Office of the Information Commissioner within the applicable statutory 72-hour period after becoming aware.
+
+2. Notify affected data subjects within the applicable statutory period where required.
+
+3. Explain the nature of the incident and relevant potential consequences.
+
+4. Describe measures taken or proposed to mitigate adverse effects.
+
+5. Investigate the cause and take reasonable corrective steps.
+
+6. Maintain appropriate incident records.
+
+Where a third-party processor experiences an incident involving CaribWayz information, CaribWayz will take appropriate steps to obtain relevant information and fulfil its own legal obligations.
+
+## 16. YOUR PRIVACY RIGHTS
+
+Subject to applicable legislation and lawful exemptions, individuals may have the following rights:
+
+- Right to be informed.
+- Right of access.
+- Right to rectification.
+- Right to erasure.
+- Right to restrict processing.
+- Right to data portability.
+- Right to object to certain processing.
+- Right to withdraw consent where consent is the lawful basis.
+- Rights concerning certain automated decisions and profiling.
+
+These rights are subject to applicable statutory conditions and exemptions.
+
+CaribWayz may retain information where legally required or reasonably necessary for lawful security, regulatory, accounting or dispute-resolution purposes.
+
+## 17. HOW TO EXERCISE YOUR RIGHTS
+
+Certain privacy choices may be available through the application:
+
+- Account and profile changes: Settings → Account & Profile.
+- Emergency medical-information sharing: Settings → Emergency Response.
+- Location permissions: Device settings.
+- Promotional notifications: Settings → Notifications.
+- Local business notifications: Settings → Allow Local Business Notifications.
+- History deletion: Settings → Privacy & Security → Delete History.
+- Personal-data download: Settings → Privacy & Security → Download Personal Data.
+- Account deletion: Settings → Account & Profile → Delete Account.
+
+For requests that cannot be completed through the application, contact:
+
+info@caribwayz.com
+
+Requests should identify the individual, the relevant account and the nature of the request.
+
+CaribWayz may request reasonable identity verification before releasing or changing personal information.
+
+Requests will be handled within applicable statutory time limits. Where a request cannot be fulfilled, an explanation will be provided where required by law.
+
+Individuals may also complain to the Office of the Information Commissioner in Jamaica or another competent authority where applicable.
+
+## 18. ACCOUNT DELETION
+
+Users may request account deletion through:
+
+Settings → Account & Profile → Delete Account.
+
+Where account deletion is completed, CaribWayz will delete or anonymise associated information from active systems, subject to lawful retention requirements.
+
+This may include:
+
+- Account profile and photograph.
+- Emergency contacts.
+- Preferences.
+- Saved routes.
+- Road reports and related account information.
+- Emergency alerts and associated records.
+- Incident records.
+- Group memberships and account-linked information.
+- Notification records.
+- Push tokens.
+- Live group-position information.
+
+Account deletion cannot recall information already received by other users, messages sent through an external messaging application or notifications already delivered.
+
+Groups created by the user may also be deleted where the application supports this function. Affected group participants may be notified.
+
+Information held in backups may remain until the applicable backup-retention period expires.
+
+Information required for legal, regulatory, accounting, security or dispute-resolution purposes may be retained for the necessary period, with access restricted.
+
+Where a user cannot access the application, an account-deletion request may be submitted to info@caribwayz.com, subject to identity verification.
+
+Administrator accounts may require removal through an authorised administrative process rather than ordinary user account deletion.
+
+## 19. CHILDREN AND MINORS
+
+CaribWayz is intended for individuals aged eighteen (18) years and older unless a particular service expressly permits otherwise in accordance with applicable law.
+
+We do not knowingly permit individuals below the applicable minimum age to create independent accounts contrary to our registration requirements.
+
+Where a service lawfully processes a minor’s information, appropriate safeguards and parental or legal guardian authorisation will be applied where required.
+
+If we become aware that personal information has been collected contrary to applicable requirements, we will take appropriate corrective measures.
+
+Concerns may be reported to info@caribwayz.com.
+
+## 20. MARKETING AND COMMUNICATIONS
+
+CaribWayz may send essential communications relating to accounts, navigation services, emergency requests, security, memberships, payments and other requested services.
+
+Promotional communications may include offers, business announcements, new features and marketing campaigns.
+
+Promotional notifications will be sent only where the necessary consent or other lawful basis has been established.
+
+Users may withdraw marketing consent or unsubscribe through the relevant communication mechanism.
+
+Withdrawing marketing consent does not necessarily stop essential service, security, transaction or emergency notifications.
+
+## 21. AUTOMATED PROCESSING AND PERSONALISATION
+
+CaribWayz may use automated systems to support navigation, route recommendations, security, fraud prevention and service functionality.
+
+Where automated systems process personal information, they will be subject to applicable data protection requirements.
+
+CaribWayz will not represent automated recommendations as professional medical, legal or emergency-response decisions.
+
+Where solely automated decisions produce legal or similarly significant effects, applicable rights and safeguards will be respected.
+
+## 22. BUSINESS USERS AND EMPLOYEE INFORMATION
+
+Business users are responsible for ensuring that personal information submitted about employees, representatives, contractors and other individuals is lawfully obtained and disclosed.
+
+CaribWayz may process representative information for verification, membership administration, account management and other specified business purposes.
+
+Business users must ensure that submitted information is accurate and updated when necessary.
+
+Additional data-processing agreements may apply where CaribWayz processes personal information on behalf of a business customer.
+
+## 23. DATA PROCESSORS AND GOVERNANCE
+
+CaribWayz will take reasonable steps to ensure that third-party processors are subject to appropriate contractual, confidentiality and security requirements.
+
+Where applicable, written agreements will address:
+
+- Processing instructions and purposes.
+- Categories of personal information.
+- Confidentiality.
+- Security measures.
+- Authorised access.
+- Subcontracting.
+- Breach notification.
+- Data return or deletion.
+- International transfers.
+- Assistance with data-subject requests.
+
+CaribWayz will maintain appropriate data protection governance, including registration, assessments, records, retention procedures, staff training and other statutory requirements applicable to its operations.
+
+Where the law requires a Data Protection Officer, CaribWayz will appoint and maintain an appropriately designated officer.
+
+## 24. INTERNATIONAL USERS
+
+CaribWayz is established in Jamaica and intends to serve users throughout the Caribbean.
+
+Individuals accessing the Platform outside Jamaica may have additional rights under the laws of their respective countries or territories.
+
+CaribWayz will assess applicable local data protection, consumer protection and electronic communications requirements when introducing services into additional jurisdictions.
+
+Nothing in this Policy removes mandatory rights available under applicable law.
+
+## 25. THIRD-PARTY WEBSITES AND SERVICES
+
+The Platform may contain links or integrations to external websites and applications.
+
+When users access those services, the relevant provider’s privacy policy and terms may apply to information collected directly by that provider.
+
+This does not remove CaribWayz’s responsibility for information it controls or processes on behalf of another party.
+
+## 26. CHANGES TO THIS POLICY
+
+CaribWayz may revise this Policy to reflect changes in technology, features, business operations or applicable law.
+
+Updated versions will display an effective or revision date and be made available through an appropriate communication channel.
+
+Material changes will be communicated where required by law. Fresh consent or authorisation will be obtained where legally necessary.
+
+## 27. CONTACT AND REGULATORY COMPLAINTS
+
+For privacy enquiries, data-subject requests or complaints, contact:
+
+CARIBWAYZ®
+
+Proprietor: Christina Baker
+
+Business registration number: 1626/2025
+
+Business structure: Sole proprietorship
+
+Principal business address: 18 Phoenix, Greater Portmore, Jamaica
 
 Email: info@caribwayz.com
 
-Data Protection Officer: Christina Baker, info@caribwayz.com
+Regulatory authority:
+
+Office of the Information Commissioner, Jamaica
+
+Website: https://oic.gov.jm
+
+Email: info@oic.gov.jm
+
+© 2026 CaribWayz®. All rights reserved.
+
+CaribWayz — The Super App
+
+Drive smarter. Travel safer. Explore more.
 `;
 
 export default privacyPolicy;
