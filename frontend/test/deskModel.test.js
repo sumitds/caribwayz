@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   typeLabel, groupAlerts, newlyWaiting, minutesWaiting, formatWaiting, formatAgo, isOverdue,
   mapLink, formatCoordinates, telLink, reporterLabel, pageTitle, errorMessage,
+  DESK_STATUS_LABELS, deskStatusOf, deskStatusLabel, canMarkAddressed,
 } from '../src/pages/Desk/deskModel.js';
 
 const ME = 'AAAAAAAA-0000-4000-8000-000000000001';
@@ -109,8 +110,66 @@ describe('location, phone and names', () => {
 
 test('page title and error messages', () => {
   assert.equal(pageTitle(0), 'CaribWayz Emergency Desk');
-  assert.equal(pageTitle(3), '(3) Waiting - CaribWayz Emergency Desk');
+  assert.equal(pageTitle(3), '(3) Pending - CaribWayz Emergency Desk');
   assert.equal(errorMessage({ response: { data: { message: 'Kim has already taken this emergency' } } }, 'x'), 'Kim has already taken this emergency');
   assert.equal(errorMessage({ request: {} }, 'x'), 'Cannot reach the server. Check the connection.');
   assert.equal(errorMessage({ response: { data: {} } }, 'fallback'), 'fallback');
+});
+
+describe('desk statuses', () => {
+  test('the disclaimer\'s words, one per status', () => {
+    assert.deepEqual(DESK_STATUS_LABELS, {
+      pending: 'Pending', acknowledged: 'Acknowledged', addressed: 'Addressed', cancelled: 'Cancelled', resolved: 'Resolved',
+    });
+  });
+
+  test('desk_status as sent; an older API is read from desk_state or acknowledged_at', () => {
+    assert.equal(deskStatusOf({ desk_status: 'addressed', status: 'resolved' }), 'addressed');
+    assert.equal(deskStatusOf({ desk_status: 'cancelled', status: 'resolved' }), 'cancelled');
+    assert.equal(deskStatusOf({ status: 'active', desk_state: 'new' }), 'pending');
+    assert.equal(deskStatusOf({ status: 'active', desk_state: 'acknowledged' }), 'acknowledged');
+    assert.equal(deskStatusOf({ status: 'active', acknowledged_at: '2026-11-18T10:00:00Z' }), 'acknowledged');
+    assert.equal(deskStatusOf({ status: 'active' }), 'pending');
+    assert.equal(deskStatusOf(null), null);
+  });
+
+  test('Resolved is shown only when it was recorded; a closed alert from an older API is just Closed', () => {
+    assert.equal(deskStatusLabel({ desk_status: 'resolved', status: 'resolved' }), 'Resolved');
+    assert.equal(deskStatusLabel({ desk_status: 'addressed', status: 'resolved' }), 'Addressed');
+    assert.equal(deskStatusLabel({ status: 'resolved', desk_state: 'resolved' }), 'Closed');
+    assert.equal(deskStatusLabel({ status: 'resolved' }), 'Closed');
+    assert.equal(deskStatusLabel({ desk_status: 'bogus', status: 'active' }), 'Pending');
+  });
+
+  test('closed alerts leave the queue whichever way they closed', () => {
+    const g = groupAlerts([
+      { id: 'p', status: 'active', desk_status: 'pending', created_at: '2026-11-18T10:00:00Z' },
+      { id: 'a', status: 'resolved', desk_status: 'addressed', created_at: '2026-11-18T10:00:00Z' },
+      { id: 'c', status: 'resolved', desk_status: 'cancelled', created_at: '2026-11-18T10:00:00Z' },
+      { id: 'r', status: 'resolved', desk_status: 'resolved', created_at: '2026-11-18T10:00:00Z' },
+      { id: 'k', status: 'active', desk_status: 'acknowledged', acknowledged_by: ME, created_at: '2026-11-18T10:00:00Z' },
+    ], ME);
+    assert.deepEqual(g.waiting.map((x) => x.id), ['p']);
+    assert.deepEqual(g.mine.map((x) => x.id), ['k']);
+    assert.deepEqual(g.others, []);
+  });
+
+  test('Mark Addressed: pending or mine for anyone, another operator\'s only for an admin, never a closed one', () => {
+    const pending = { status: 'active', desk_status: 'pending' };
+    const acknowledged = { status: 'active', desk_status: 'acknowledged' };
+    assert.equal(canMarkAddressed(pending, 'waiting', false), true);
+    assert.equal(canMarkAddressed(acknowledged, 'mine', false), true);
+    assert.equal(canMarkAddressed(acknowledged, 'others', false), false);
+    assert.equal(canMarkAddressed(acknowledged, 'others', true), true);
+    for (const closed of ['addressed', 'cancelled', 'resolved']) {
+      assert.equal(canMarkAddressed({ status: 'resolved', desk_status: closed }, 'mine', true), false, closed);
+    }
+  });
+
+  test('overdue only while Pending', () => {
+    const now = new Date('2026-11-18T12:00:00Z').getTime();
+    assert.equal(isOverdue({ desk_status: 'pending', created_at: '2026-11-18T11:50:00Z' }, now), true);
+    assert.equal(isOverdue({ desk_status: 'acknowledged', created_at: '2026-11-18T11:50:00Z' }, now), false);
+    assert.equal(isOverdue({ desk_status: 'addressed', status: 'resolved', created_at: '2026-11-18T11:50:00Z' }, now), false);
+  });
 });

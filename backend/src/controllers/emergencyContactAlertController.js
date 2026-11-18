@@ -45,7 +45,8 @@ const buildContactAlertHandlers = ({ query: run }) => {
       if (!UUID_PATTERN.test(String(id))) return error(res, 'Alert id must be a valid UUID', 400);
 
       const result = await run(
-        `SELECT a.id, a.user_id, a.type, a.status, a.created_at, a.resolved_at, a.resolved_by,
+        `SELECT a.id, a.user_id, a.type, a.status, a.desk_status, a.created_at, a.resolved_at, a.resolved_by,
+                a.acknowledged_at, a.addressed_at, a.cancelled_at,
                 a.latitude, a.longitude, a.live_latitude, a.live_longitude, a.live_located_at,
                 s.name AS sender_name, s.verified_phone AS sender_phone,
                 s.emergency_contacts AS sender_contacts, r.verified_phone AS reader_phone
@@ -72,13 +73,15 @@ const buildContactAlertHandlers = ({ query: run }) => {
   /**
    * GET /emergency/contact-alerts
    *
-   * The caller's open contact alerts, and those closed in the last day, newest
-   * first. No positions: the list only leads to the alert.
+   * The caller's open contact alerts, and those closed (cancelled, addressed
+   * or, before migration 033, resolved) in the last day, newest first. No
+   * positions: the list only leads to the alert.
    */
   const listContactAlerts = async (req, res) => {
     try {
       const result = await run(
-        `SELECT a.id, a.user_id, a.type, a.status, a.created_at, a.resolved_at, a.resolved_by,
+        `SELECT a.id, a.user_id, a.type, a.status, a.desk_status, a.created_at, a.resolved_at, a.resolved_by,
+                a.acknowledged_at, a.addressed_at, a.cancelled_at,
                 a.live_latitude, a.live_longitude, a.live_located_at,
                 s.name AS sender_name, s.verified_phone AS sender_phone,
                 s.emergency_contacts AS sender_contacts, r.verified_phone AS reader_phone
@@ -88,7 +91,8 @@ const buildContactAlertHandlers = ({ query: run }) => {
            JOIN users r ON r.id = c.contact_user_id
           WHERE c.contact_user_id = $1
             AND ${notBlockedBetween('a.user_id', '$1')}
-            AND (a.status = 'active' OR a.resolved_at > NOW() - make_interval(hours => $2))
+            AND (a.status = 'active'
+                 OR COALESCE(a.addressed_at, a.cancelled_at, a.resolved_at) > NOW() - make_interval(hours => $2))
           ORDER BY (a.status = 'active') DESC, a.created_at DESC
           LIMIT $3`,
         [req.user.id, RESOLVED_LIST_WINDOW_HOURS, MAX_LISTED_ALERTS]

@@ -7,7 +7,7 @@ import Input from '../../components/UI/Input';
 import Modal from '../../components/UI/Modal';
 import LocationPicker from '../../components/UI/LocationPicker';
 import {
-  MdAdd, MdBusiness, MdEdit, MdLocalOffer, MdPause, MdPlace, MdPlayArrow, MdVisibility, MdVisibilityOff,
+  MdAdd, MdBusiness, MdEdit, MdLocalOffer, MdPause, MdPlace, MdPlayArrow, MdStar, MdVisibility, MdVisibilityOff,
 } from 'react-icons/md';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -15,6 +15,7 @@ import {
   MEMBERSHIP_STATUSES, EMPTY_BUSINESS_FORM, businessFormFrom, businessPayload, isShownOnMap, isPromoLive,
   tierRangeShort, apiMessage, suspensionAction,
 } from './memberAdminModel';
+import { EMPTY_FEATURED_FORM, featuredFormFrom, featuredPayload, featuredNote, jamaicaToday } from './memberAddonsModel';
 import {
   StatusPill, Field, FilterChips, PageHeader, EmptyState, ErrorState, selectStyle, textareaStyle, smallButton,
 } from './memberUi';
@@ -29,12 +30,13 @@ const BusinessForm = ({ initial, tiers, submitting, onSubmit, submitLabel }) => 
   const handleSubmit = (e) => {
     e.preventDefault();
     const result = businessPayload(form);
-    if (result.errors) {
-      setErrors(result.errors);
+    const featured = featuredPayload(form);
+    if (result.errors || featured.errors) {
+      setErrors({ ...result.errors, ...featured.errors });
       return;
     }
     setErrors({});
-    onSubmit(result.body);
+    onSubmit({ ...result.body, ...featured.body });
   };
 
   return (
@@ -103,6 +105,16 @@ const BusinessForm = ({ initial, tiers, submitting, onSubmit, submitLabel }) => 
       <Input label="Promotion ends (empty = runs until removed)" type="datetime-local" value={form.promo_expires_at}
         onChange={set('promo_expires_at')} error={errors.promo_expires_at} />
 
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <legend style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 0.3rem' }}>Featured placement (add-on)</legend>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+          <input type="checkbox" checked={form.is_featured} onChange={(e) => setForm({ ...form, is_featured: e.target.checked })} />
+          Featured: listed first in the app and marked "Featured" on its map pin
+        </label>
+        <Input label={`Featured until (last day, Jamaica)${form.is_featured ? ' *' : ''}`} type="date" value={form.featured_until}
+          onChange={set('featured_until')} error={errors.featured_until} />
+      </fieldset>
+
       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
         <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
         Listed (unticked hides it from the app whatever its status)
@@ -150,6 +162,7 @@ const AdminBusinesses = () => {
   const businesses = businessesQuery.data || [];
   const tiers = tiersQuery.data || [];
   const now = new Date();
+  const today = jamaicaToday(now);
 
   return (
     <Layout>
@@ -175,6 +188,7 @@ const AdminBusinesses = () => {
           {businesses.map((b) => {
             const onMap = isShownOnMap(b, now);
             const promoLive = isPromoLive(b, now);
+            const featured = featuredNote(b, today);
             return (
               <div key={b.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
@@ -187,6 +201,11 @@ const AdminBusinesses = () => {
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: onMap ? '#2D8C00' : '#888', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                   <MdPlace size={14} /> {onMap ? 'Shown on the map' : 'Not shown on the map'}
                 </div>
+                {featured && (
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: featured.live ? '#B26A00' : '#888', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <MdStar size={14} /> {featured.text}
+                  </div>
+                )}
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                   {b.tier_name || 'No tier'}
                   {b.employee_count ? ` · ${b.employee_count} employees` : ''}
@@ -249,7 +268,9 @@ const AdminBusinesses = () => {
         <Modal title={editing === 'new' ? 'Add Member Business' : `Edit ${editing.name}`} onClose={() => setEditing(null)} width="620px">
           <BusinessForm
             key={editing === 'new' ? 'new' : editing.id}
-            initial={editing === 'new' ? { ...EMPTY_BUSINESS_FORM } : businessFormFrom(editing)}
+            initial={editing === 'new'
+              ? { ...EMPTY_BUSINESS_FORM, ...EMPTY_FEATURED_FORM }
+              : { ...businessFormFrom(editing), ...featuredFormFrom(editing) }}
             tiers={tiers}
             submitting={addMutation.isPending || updateMutation.isPending}
             submitLabel={editing === 'new' ? 'Add Business' : 'Save Changes'}

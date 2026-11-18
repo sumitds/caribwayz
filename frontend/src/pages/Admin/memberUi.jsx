@@ -13,6 +13,11 @@ export const STATUS_COLORS = {
   invoiced: '#F5A623',
   paid: '#2D8C00',
   rejected: '#CC2229',
+  // Campaign states (migration 034).
+  scheduled: '#0E7AC4',
+  running: '#2D8C00',
+  finished: '#888888',
+  ended: '#CC2229',
 };
 
 export const StatusPill = ({ status }) => {

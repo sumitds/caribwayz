@@ -149,6 +149,7 @@ describe('promotions and member shape', () => {
     assert.deepEqual(member, {
       id: BUSINESS_ID, name: 'Island Grill', category: 'restaurant', latitude: 18.0179, longitude: -76.8099,
       address: null, phone: '876 555 0100', website: null, description: null, promo_text: null, distance_m: 124,
+      featured: false,
     });
     assert.equal(typeof member.latitude, 'number');
   });
@@ -304,6 +305,7 @@ describe('public member handlers', () => {
     assert.deepEqual(res.body.data.members, [{
       id: BUSINESS_ID, name: 'Island Grill', category: 'restaurant', latitude: 18.018, longitude: -76.81,
       address: '1 King St', phone: null, website: null, description: null, promo_text: 'Free drink', distance_m: 15,
+      featured: false,
     }]);
     const [{ text, params }] = calls;
     assert.match(text, /membership_status = 'active'/);
@@ -1279,8 +1281,9 @@ describe('member businesses against Postgres', { skip: !process.env.TEST_DATABAS
     }
     assert.ok(Math.abs(members[0].distance_m - 100) <= 2, `${members[0].distance_m} m`);
     assert.ok(Math.abs(members[1].distance_m - 900) <= 5, `${members[1].distance_m} m`);
-    assert.deepEqual(Object.keys(members[0]).sort(), ['address', 'category', 'description', 'distance_m', 'id', 'latitude',
-      'longitude', 'name', 'phone', 'promo_text', 'website']);
+    // featured was added by migration 034; every field before it is unchanged.
+    assert.deepEqual(Object.keys(members[0]).sort(), ['address', 'category', 'description', 'distance_m', 'featured', 'id',
+      'latitude', 'longitude', 'name', 'phone', 'promo_text', 'website']);
   });
 
   test('nearby: the radius is clamped to 50 m and 20 km', async () => {

@@ -274,6 +274,79 @@ const sendMembershipApplicationNotice = async ({ toEmail, application, tier }) =
   });
 };
 
+/** True for one address that cannot start a new mail header. */
+const isSingleAddress = (value) => typeof value === 'string' && !/[\r\n,;]/.test(value) && value.includes('@');
+
+/** [date] as "18 December 2026", the day it is in Jamaica, where the members are. */
+const jamaicaLongDate = (date) => new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'America/Jamaica', day: 'numeric', month: 'long', year: 'numeric',
+}).format(date);
+
+/**
+ * Emails a member business that its membership ends on [expiresAt], or ended
+ * then when [expired]. Sent only when an admin clicks Send reminder on the
+ * renewal reminders list (migration 034); there is no schedule.
+ *
+ * [contactEmail] is where replies go (the membership settings' contact, else
+ * ADMIN_EMAIL), and is named in the text; null leaves both out.
+ * [paymentInstructions] is added when not empty. Throws on a bad recipient or
+ * a mail server failure.
+ */
+const sendMembershipRenewalReminder = async ({
+  toEmail, businessName, expiresAt, expired, contactEmail, paymentInstructions,
+}) => {
+  if (!isSingleAddress(toEmail)) {
+    throw new Error('sendMembershipRenewalReminder: a single valid recipient address is required');
+  }
+  if (typeof businessName !== 'string' || businessName.trim() === '') {
+    throw new Error('sendMembershipRenewalReminder: the business name is required');
+  }
+  if (!(expiresAt instanceof Date) || Number.isNaN(expiresAt.getTime())) {
+    throw new Error('sendMembershipRenewalReminder: the membership end date is required');
+  }
+  const replyTo = isSingleAddress(contactEmail) ? contactEmail : null;
+  const day = jamaicaLongDate(expiresAt);
+  const name = businessName.trim();
+  const instructions = typeof paymentInstructions === 'string' ? paymentInstructions.trim() : '';
+
+  const lead = expired
+    ? `The CaribWayz membership for ${name} ended on ${day}. It is no longer shown on the CaribWayz map or announced to drivers nearby.`
+    : `The CaribWayz membership for ${name} ends on ${day}. Renew before then to stay on the CaribWayz map and keep being announced to drivers nearby.`;
+  const ask = replyTo
+    ? `To renew, reply to this email or write to ${replyTo}.`
+    : 'To renew, reply to this email.';
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;border-radius:12px;background:#f9f9f9;">
+      <h2 style="color:#10c329;">${expired ? 'Your CaribWayz membership has ended' : 'Your CaribWayz membership is ending'}</h2>
+      <p style="font-size:14px;">${escapeHtml(lead)}</p>
+      <p style="font-size:14px;">${escapeHtml(ask)}</p>
+      ${instructions ? `<p style="font-size:14px;color:#555;">How to pay:</p><p style="font-size:14px;white-space:pre-wrap;">${escapeHtml(instructions)}</p>` : ''}
+      <p style="font-size:14px;">Thank you for being a CaribWayz member business.</p>
+      <p style="font-size:12px;color:#999;text-align:center;margin-top:24px;">CaribWayz — Navigate Together</p>
+    </div>
+  `;
+
+  const subject = expired
+    ? `Your CaribWayz membership for ${name} ended on ${day}`
+    : `Your CaribWayz membership for ${name} ends on ${day}`;
+
+  await transporter.sendMail({
+    from: `"CaribWayz" <${process.env.SMTP_USER}>`,
+    to: toEmail,
+    ...(replyTo ? { replyTo } : {}),
+    // Header-safe: a CR/LF in a business name must not start a new mail header.
+    subject: subject.replace(/[\r\n]+/g, ' '),
+    html,
+    text: [lead, ask, instructions ? `How to pay:\n${instructions}` : null, 'Thank you for being a CaribWayz member business.']
+      .filter(Boolean).join('\n\n'),
+    headers: {
+      'X-Mailer': 'CaribWayz Mailer',
+    },
+  });
+};
+
 module.exports = {
   sendGroupInvite, isEmailConfigured, sendPasswordResetCode, sendTwoFactorCode, sendMembershipApplicationNotice,
+  sendMembershipRenewalReminder,
 };

@@ -19,15 +19,17 @@ const DraftNote = () => (
 );
 
 /**
- * /privacy and /terms: the same text the app shows, from one source file per
- * document (src/legal/). [markdown] is that file's text.
+ * /privacy, /terms, /emergency-desk-disclaimer and /membership/policy: the
+ * same text the app shows, from one source file per document (src/legal/).
+ * [markdown] is that file's text; [approved] is false for a document that is
+ * still a draft, which the page then says.
  */
-const LegalPage = ({ markdown }) => {
+const LegalPage = ({ markdown, approved = LEGAL_APPROVED }) => {
   const doc = useMemo(() => parseLegalDocument(markdown), [markdown]);
 
   useEffect(() => {
-    document.title = `${doc.title}${LEGAL_APPROVED ? '' : ` (${DRAFT_LABEL})`}`;
-  }, [doc.title]);
+    document.title = `${doc.title}${approved ? '' : ` (${DRAFT_LABEL})`}`;
+  }, [doc.title, approved]);
 
   return (
     <PublicLayout>
@@ -36,7 +38,7 @@ const LegalPage = ({ markdown }) => {
         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
           Version {doc.version} · Last updated {doc.lastUpdated}
         </p>
-        {!LEGAL_APPROVED && <DraftNote />}
+        {!approved && <DraftNote />}
         {groupBullets(doc.blocks).map((block, i) => {
           if (block.type === 'heading') {
             return block.level === 2

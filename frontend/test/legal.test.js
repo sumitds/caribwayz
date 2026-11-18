@@ -1,4 +1,5 @@
-// The public /privacy and /terms pages. Run with: npm test (node --test).
+// The public legal pages (/privacy, /terms, /emergency-desk-disclaimer and
+// /membership/policy). Run with: npm test (node --test).
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,16 +8,29 @@ import { readFileSync } from 'node:fs';
 import privacyPolicy from '../src/legal/privacyPolicy.js';
 import termsOfService from '../src/legal/termsOfService.js';
 import businessMembershipPolicy from '../src/legal/businessMembershipPolicy.js';
-import { parseLegalDocument, parseInline, groupBullets, LEGAL_APPROVED, DRAFT_LABEL } from '../src/legal/legalDocument.js';
+import emergencyDeskDisclaimer from '../src/legal/emergencyDeskDisclaimer.js';
+import {
+  parseLegalDocument, parseInline, groupBullets, LEGAL_APPROVED, MEMBERSHIP_POLICY_APPROVED, DRAFT_LABEL,
+} from '../src/legal/legalDocument.js';
 
 const repoFile = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 
 describe('the legal text', () => {
-  test('is word for word the text the app ships and the lawyer reviews', () => {
-    assert.equal(privacyPolicy, repoFile('docs/legal/privacy-policy.md'));
-    assert.equal(termsOfService, repoFile('docs/legal/terms-of-service.md'));
-    assert.equal(privacyPolicy, repoFile('mobile/assets/legal/privacy-policy.md'));
-    assert.equal(termsOfService, repoFile('mobile/assets/legal/terms-of-service.md'));
+  test('is word for word the text the app ships and docs/legal keeps', () => {
+    for (const [text, file] of [
+      [privacyPolicy, 'privacy-policy.md'],
+      [termsOfService, 'terms-of-service.md'],
+      [emergencyDeskDisclaimer, 'emergency-desk-disclaimer.md'],
+    ]) {
+      assert.equal(text, repoFile(`docs/legal/${file}`), file);
+      assert.equal(text, repoFile(`mobile/assets/legal/${file}`), file);
+    }
+  });
+
+  test('the app registers the folder that carries all three documents', () => {
+    assert.match(repoFile('mobile/pubspec.yaml'), /^ {4}- assets\/legal\/$/m);
+    const dart = repoFile('mobile/lib/src/settings/legal/legal_document.dart');
+    assert.match(dart, /emergencyDeskDisclaimerAsset = "assets\/legal\/emergency-desk-disclaimer\.md";/);
   });
 
   test('the Business Membership Policy is word for word the client policy file, and reads as a document', () => {
@@ -32,27 +46,72 @@ describe('the legal text', () => {
     assert.ok(!doc.blocks.some((b) => /^DRAFT/.test(b.text)), 'the draft notice comes from the page, not the file');
   });
 
-  test('is still a draft, as in the app, and the pages say so', () => {
+  test('the three documents are final, as in the app; the membership policy is still a draft', () => {
     const dart = repoFile('mobile/lib/src/settings/legal/legal_document.dart');
+    assert.equal(LEGAL_APPROVED, true);
     assert.match(dart, new RegExp(`approvedByLawyer = ${LEGAL_APPROVED};`));
+    assert.equal(MEMBERSHIP_POLICY_APPROVED, false);
     assert.equal(DRAFT_LABEL, 'Draft, pending legal review');
   });
 
-  test('both documents read with a title, version, date and sections', () => {
-    for (const [text, title, version] of [
-      [privacyPolicy, 'CaribWayz Privacy Policy', '0.5 (draft)'],
-      [termsOfService, 'CaribWayz Terms of Service', '0.3 (draft)'],
+  test('every page that shows a document is routed, the disclaimer with the others', () => {
+    const app = repoFile('admin/src/App.jsx');
+    for (const route of [
+      '<Route path="/privacy" element={<LegalPage markdown={privacyPolicy} />} />',
+      '<Route path="/terms" element={<LegalPage markdown={termsOfService} />} />',
+      '<Route path="/emergency-desk-disclaimer" element={<LegalPage markdown={emergencyDeskDisclaimer} />} />',
+      '<Route path="/membership/policy" element={<LegalPage markdown={businessMembershipPolicy} approved={MEMBERSHIP_POLICY_APPROVED} />} />',
+    ]) {
+      assert.ok(app.includes(route), route);
+    }
+    const layout = repoFile('admin/src/pages/Public/PublicLayout.jsx');
+    assert.ok(layout.includes("{ to: '/emergency-desk-disclaimer', label: 'Emergency Desk' }"), 'the disclaimer is in the public links');
+  });
+
+  test('the three documents read as version 1.0, effective 18 November 2026, with no blank left', () => {
+    for (const [text, title, lastSection] of [
+      [privacyPolicy, 'CaribWayz Privacy Policy', '27. CONTACT AND REGULATORY COMPLAINTS'],
+      [termsOfService, 'CaribWayz Terms of Agreement', '28. CONTACT INFORMATION'],
+      [emergencyDeskDisclaimer, 'CaribWayz Emergency Desk Disclaimer', '25. CONTACT INFORMATION'],
     ]) {
       const doc = parseLegalDocument(text);
       assert.equal(doc.title, title);
-      assert.equal(doc.version, version);
-      assert.match(doc.lastUpdated, /2026/);
-      assert.ok(doc.blocks.some((b) => b.type === 'heading' && b.level === 2));
+      assert.equal(doc.version, '1.0');
+      assert.equal(doc.lastUpdated, '18 November 2026');
+      assert.ok(doc.blocks.some((b) => b.type === 'paragraph' && b.text === 'Effective Date: 18 November 2026'), title);
+      const sections = doc.blocks.filter((b) => b.type === 'heading' && b.level === 2).map((b) => b.text);
+      assert.equal(sections[0].startsWith('1. '), true, title);
+      assert.equal(sections[sections.length - 1], lastSection);
+      sections.forEach((s, i) => assert.ok(s.startsWith(`${i + 1}. `), `${title}: section ${i + 1} is "${s}"`));
       assert.ok(doc.blocks.some((b) => b.type === 'bullet'));
-      assert.ok(!doc.blocks.some((b) => /^DRAFT/.test(b.text)), 'the file\'s own draft note is replaced by the page\'s');
+      assert.ok(!doc.blocks.some((b) => /^DRAFT/.test(b.text)), 'a final document carries no draft note');
+      assert.doesNotMatch(text, /\[[^\]]*\]/, `${title} has a [blank] left`);
+      assert.doesNotMatch(text, /\u200b|\ufffd/, `${title} carries a stray character from the PDF`);
     }
-    const terms = parseLegalDocument(termsOfService);
-    assert.ok(terms.blocks.some((b) => b.type === 'heading' && b.level === 3 && b.text === '5.1 Storm, earthquake and tsunami alerts'));
+  });
+
+  test('the privacy policy carries the filled blanks and matches the app', () => {
+    for (const fact of [
+      'Data Protection Officer: Christina Baker, info@caribwayz.com',
+      'CaribWayz hosting region: Render, United States (Oregon, US West).',
+      '**Technical and server logs:** Retained for 7 days.',
+      '**Backups:** Retained for 3 days, according to the actual hosting and backup arrangements.',
+      '**Email delivery provider (SMTP)**',
+      'our email delivery provider (SMTP), United States',
+      'Profile photograph upload is not currently available, so profile photographs are not uploaded to CaribWayz servers.',
+    ]) {
+      assert.ok(privacyPolicy.includes(fact), fact);
+    }
+    assert.ok(!privacyPolicy.includes('Cloud Storage for Firebase.\n'), 'no Storage bucket on the Spark plan');
+    assert.ok(!privacyPolicy.includes('Firebase Realtime Database'), 'no Firebase database holds CaribWayz data');
+  });
+
+  test('the disclaimer gives the Jamaican emergency numbers', () => {
+    const doc = parseLegalDocument(emergencyDeskDisclaimer);
+    const bullets = doc.blocks.filter((b) => b.type === 'bullet').map((b) => b.text);
+    assert.ok(bullets.includes('Police: 119'));
+    assert.ok(bullets.includes('Fire and ambulance: 110'));
+    assert.ok(doc.blocks.some((b) => b.text === '**CARIBWAYZ IS NOT A REPLACEMENT FOR OFFICIAL EMERGENCY SERVICES.**'));
   });
 });
 

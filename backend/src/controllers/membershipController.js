@@ -10,14 +10,22 @@ const ACTIVE_TIERS_SQL = `SELECT id, name, min_employees, max_employees, annual_
   ORDER BY sort_order NULLS LAST, min_employees, id`;
 
 /**
- * Members within [radiusMeters] of a point, nearest first. Distance is the
- * haversine great-circle distance worked out in SQL (there is no PostGIS);
- * the box around the point only lets the latitude/longitude index skip rows
- * far away, as the shelter and roadside lookups do. Only members that are
- * listed, paid up and not past their expiry are returned.
+ * Members within [radiusMeters] of a point. Distance is the haversine
+ * great-circle distance worked out in SQL (there is no PostGIS); the box
+ * around the point only lets the latitude/longitude index skip rows far away,
+ * as the shelter and roadside lookups do. Only members that are listed, paid
+ * up and not past their expiry are returned.
+ *
+ * Featured members come first, then the nearest (migration 034), so the
+ * limit never drops a featured member inside the radius. featured_now and the
+ * running campaign's offer go by the calendar day in Jamaica; when several
+ * campaigns run at once the one that started latest wins, as
+ * membership.pickCampaign does.
  */
-const NEARBY_SQL = `SELECT id, name, category, latitude, longitude, address, phone, website, description,
-        promo_text, promo_expires_at, distance_m
+const NEARBY_SQL = `SELECT m.id, m.name, m.category, m.latitude, m.longitude, m.address, m.phone, m.website, m.description,
+        m.promo_text, m.promo_expires_at, m.distance_m,
+        COALESCE(m.is_featured AND m.featured_until >= ${membership.JAMAICA_TODAY_SQL}, FALSE) AS featured_now,
+        c.offer_text AS campaign_offer
    FROM (
      SELECT b.*,
             2 * 6371000 * ASIN(LEAST(1, SQRT(
@@ -32,8 +40,18 @@ const NEARBY_SQL = `SELECT id, name, category, latitude, longitude, address, pho
         AND b.latitude BETWEEN $3 AND $4
         AND (b.longitude BETWEEN $5 AND $6 OR b.longitude BETWEEN $7 AND $8)
    ) AS m
-  WHERE distance_m <= $9
-  ORDER BY distance_m, id
+   LEFT JOIN LATERAL (
+     SELECT mc.offer_text
+       FROM member_campaigns mc
+      WHERE mc.business_id = m.id
+        AND mc.ended_at IS NULL
+        AND mc.start_date <= ${membership.JAMAICA_TODAY_SQL}
+        AND mc.end_date >= ${membership.JAMAICA_TODAY_SQL}
+      ORDER BY mc.start_date DESC, mc.created_at DESC, mc.id DESC
+      LIMIT 1
+   ) AS c ON TRUE
+  WHERE m.distance_m <= $9
+  ORDER BY featured_now DESC, m.distance_m, m.id
   LIMIT $10`;
 
 /**

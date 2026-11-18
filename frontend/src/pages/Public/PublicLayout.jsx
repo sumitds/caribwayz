@@ -1,13 +1,14 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 
-// The frame of the public pages (/membership, /privacy, /terms): no login,
-// no sidebar, readable on a phone.
+// The frame of the public pages (/membership, /privacy, /terms,
+// /emergency-desk-disclaimer): no login, no sidebar, readable on a phone.
 
 const links = [
   { to: '/membership', label: 'Membership' },
   { to: '/privacy', label: 'Privacy' },
   { to: '/terms', label: 'Terms' },
+  { to: '/emergency-desk-disclaimer', label: 'Emergency Desk' },
 ];
 
 const PublicLayout = ({ children }) => (

@@ -48,6 +48,9 @@ const EXPORT_SECTIONS = [
   ['weather_alert_area', 'SELECT latitude, longitude, updated_at FROM user_alert_areas WHERE user_id = $1'],
   ['weather_alerts_sent', 'SELECT alert_key, sent_at FROM weather_alert_deliveries WHERE user_id = $1 ORDER BY sent_at'],
   ['sign_ins', 'SELECT method, platform, created_at, expires_at, revoked_at FROM user_sessions WHERE user_id = $1 ORDER BY created_at'],
+  // The Terms of Service and Privacy Policy versions accepted (migration 032).
+  ['legal_acceptances', `SELECT document, version, accepted_at, method, host(ip_address) AS ip_address, user_agent
+     FROM legal_acceptances WHERE user_id = $1 ORDER BY accepted_at`],
 ];
 
 /** The literal a caller must send to delete, so a stray request cannot. */
@@ -71,7 +74,8 @@ const ownedStoragePath = (url, bucketName) => {
  * @param {(text: string, params?: any[]) => Promise<{rows: any[], rowCount: number}>} deps.query
  * @param {() => Promise<{query: Function, release: Function}>} deps.getClient
  * @param {(groupId: string, payload: object) => number} deps.broadcastToGroup
- * @param {() => any} deps.getStorage   firebase-admin storage, or null when not configured
+ * @param {() => any} deps.getStorage   the Storage bucket (config/firebase.js getStorage, which
+ *   already returns admin.storage().bucket()), or null when not configured
  * @param {() => any} deps.getRealtimeDB firebase-admin database, or null when not configured
  * @param {(plain: string, hash: string) => Promise<boolean>} [deps.comparePassword]
  * @param {() => Date} [deps.now]
@@ -130,10 +134,9 @@ const buildAccountHandlers = ({
 
   /** Best-effort clean-up of copies outside Postgres. Never throws. */
   const removeExternalCopies = async (userId, profileImage, memberGroupIds) => {
-    const storage = getStorage();
-    if (storage) {
+    const bucket = getStorage();
+    if (bucket) {
       try {
-        const bucket = storage.bucket();
         const path = ownedStoragePath(profileImage, bucket.name);
         if (path) await bucket.file(path).delete({ ignoreNotFound: true });
       } catch (err) {

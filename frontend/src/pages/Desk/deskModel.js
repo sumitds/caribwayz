@@ -17,6 +17,54 @@ export const typeLabel = (type) => {
   return text ? text.charAt(0).toUpperCase() + text.slice(1).replace(/_/g, ' ') : 'Unknown';
 };
 
+/**
+ * The Emergency Desk statuses, in the words of the Emergency Desk Disclaimer
+ * (section 5). Each means only what it says: Acknowledged is not "help is
+ * coming", Addressed is not "the emergency is over", and nothing is called
+ * Resolved unless the desk recorded that (only alerts closed before the
+ * statuses were separated carry it).
+ */
+export const DESK_STATUS_LABELS = Object.freeze({
+  pending: 'Pending',
+  acknowledged: 'Acknowledged',
+  addressed: 'Addressed',
+  cancelled: 'Cancelled',
+  resolved: 'Resolved',
+});
+
+const OPEN_STATUSES = ['pending', 'acknowledged'];
+
+/**
+ * The desk status of [alert]. An alert from an older API has no desk_status:
+ * its desk_state ('new' | 'acknowledged') or acknowledged_at says whether it
+ * is pending or acknowledged, and a closed one from it is reported as closed
+ * (null), never given a status it did not carry.
+ */
+export const deskStatusOf = (alert) => {
+  if (!alert) return null;
+  if (DESK_STATUS_LABELS[alert.desk_status]) return alert.desk_status;
+  if (alert.status === 'resolved' || alert.desk_state === 'resolved') return null;
+  if (alert.desk_state === 'acknowledged') return 'acknowledged';
+  if (alert.desk_state === 'new') return 'pending';
+  return alert.acknowledged_at ? 'acknowledged' : 'pending';
+};
+
+/** "Pending", "Acknowledged", ...; "Closed" for a closed alert from an older API. */
+export const deskStatusLabel = (alert) => {
+  const status = deskStatusOf(alert);
+  return status ? DESK_STATUS_LABELS[status] : 'Closed';
+};
+
+const isOpen = (alert) => OPEN_STATUSES.includes(deskStatusOf(alert));
+
+/**
+ * Whether this operator may mark [alert] Addressed from the [mode] section:
+ * a pending alert, or one they acknowledged; an administrator, any open one.
+ * The server applies the same rule.
+ */
+export const canMarkAddressed = (alert, mode, isAdmin) =>
+  isOpen(alert) && (mode !== 'others' || Boolean(isAdmin));
+
 const time = (value) => {
   const t = new Date(value).getTime();
   return Number.isFinite(t) ? t : 0;
@@ -27,21 +75,23 @@ const sameId = (a, b) => a != null && b != null && String(a).toLowerCase() === S
 /**
  * Splits the open feed into the queue the operator works from.
  *
- * - waiting: nobody has taken it; oldest first, because the person who has
- *   waited longest is the most urgent.
- * - mine: taken by this operator; oldest first.
- * - others: taken by another operator; shown so nobody duplicates the work.
+ * - waiting: Pending, nobody has acknowledged it; oldest first, because the
+ *   person who has waited longest is the most urgent.
+ * - mine: Acknowledged by this operator; oldest first.
+ * - others: Acknowledged by another operator; shown so nobody duplicates the
+ *   work.
  *
- * Alerts whose desk_state is missing (an older API) count as waiting unless
- * acknowledged_at is set, so nothing is ever silently dropped.
+ * Addressed, Cancelled and Resolved alerts are not in the queue. An alert
+ * from an older API without desk_status is placed by deskStatusOf, so nothing
+ * open is ever silently dropped.
  */
 export const groupAlerts = (alerts, myUserId) => {
   const waiting = [];
   const mine = [];
   const others = [];
   for (const alert of Array.isArray(alerts) ? alerts : []) {
-    if (!alert || alert.status === 'resolved' || alert.desk_state === 'resolved') continue;
-    const taken = alert.desk_state ? alert.desk_state === 'acknowledged' : Boolean(alert.acknowledged_at);
+    if (!alert || !isOpen(alert)) continue;
+    const taken = deskStatusOf(alert) === 'acknowledged';
     if (!taken) waiting.push(alert);
     else if (sameId(alert.acknowledged_by, myUserId)) mine.push(alert);
     else others.push(alert);
@@ -91,7 +141,7 @@ export const OVERDUE_MINUTES = 5;
 
 export const isOverdue = (alert, now = Date.now()) => {
   const minutes = minutesWaiting(alert.created_at, now);
-  return alert.desk_state !== 'acknowledged' && minutes !== null && minutes >= OVERDUE_MINUTES;
+  return deskStatusOf(alert) === 'pending' && minutes !== null && minutes >= OVERDUE_MINUTES;
 };
 
 const validCoordinate = (lat, lng) =>
@@ -137,9 +187,9 @@ export const reporterLabel = (name) => {
   return text && text.toLowerCase() !== 'default' ? text : 'Name not given';
 };
 
-/** The browser tab title: the waiting count is visible from another tab. */
-export const pageTitle = (waitingCount) =>
-  waitingCount > 0 ? `(${waitingCount}) Waiting - CaribWayz Emergency Desk` : 'CaribWayz Emergency Desk';
+/** The browser tab title: the Pending count is visible from another tab. */
+export const pageTitle = (pendingCount) =>
+  pendingCount > 0 ? `(${pendingCount}) Pending - CaribWayz Emergency Desk` : 'CaribWayz Emergency Desk';
 
 /** A readable message from an axios error, for toasts. */
 export const errorMessage = (err, fallback) =>

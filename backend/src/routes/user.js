@@ -7,7 +7,7 @@ const { perUser } = require('../middleware/rateLimit');
 const { isPlaceholderName } = require('../utils/displayName');
 const {
   getProfile, updateProfile, getPreferences, updatePreferences,
-  registerDeviceToken, removeDeviceToken, updateAlertArea,
+  registerDeviceToken, removeDeviceToken, updateAlertArea, acceptLegalTerms,
 } = require('../controllers/userController');
 const { exportData, deleteAccount } = require('../controllers/accountController');
 const security = require('../controllers/securityController');
@@ -27,6 +27,15 @@ const upload = multer({
 router.use(authenticate);
 
 router.get('/profile', getProfile);
+
+// Accepting the current Terms of Service and Privacy Policy. Validation lives
+// in services/legalAcceptance.js, which answers 400 with a code the app reads.
+router.post(
+  '/legal-acceptance',
+  perUser(20, 15 * 60 * 1000, 'Too many attempts. Please wait 15 minutes and try again.'),
+  acceptLegalTerms
+);
+
 // A name is optional here (omitted means unchanged), but a name that is sent
 // must be a real one: "default" or whitespace would overwrite the stored name.
 const profileValidators = [

@@ -25,6 +25,53 @@ const codedErrorBody = (example, code) => ({
   },
 });
 
+/**
+ * The acceptance fields of a sign-up (services/legalAcceptance.js). The
+ * current versions are in config/legalVersions.js.
+ */
+const acceptanceProperties = {
+  accepted_terms_version: {
+    type: 'string',
+    nullable: true,
+    maxLength: 32,
+    example: '1.0',
+    description: 'The Terms of Service version the person read and accepted. Must be the current version.',
+  },
+  accepted_privacy_version: {
+    type: 'string',
+    nullable: true,
+    maxLength: 32,
+    example: '1.0',
+    description: 'The Privacy Policy version the person read and accepted. Must be the current version.',
+  },
+};
+
+/** A refused acceptance: 400 with the code and the current versions. */
+const acceptanceRefusal = (when) => ({
+  description:
+    `${when} data.code is TERMS_NOT_ACCEPTED when a field is missing, null or blank, and TERMS_VERSION_OUTDATED ` +
+    'when a version is not the current one. data carries the current versions.',
+  content: {
+    'application/json': {
+      schema: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: false },
+          message: { type: 'string', example: 'Please read and accept the Terms of Service and Privacy Policy to continue.' },
+          data: {
+            type: 'object',
+            properties: {
+              code: { type: 'string', enum: ['TERMS_NOT_ACCEPTED', 'TERMS_VERSION_OUTDATED'] },
+              terms_version: { type: 'string', example: '1.0' },
+              privacy_version: { type: 'string', example: '1.0' },
+            },
+          },
+        },
+      },
+    },
+  },
+});
+
 /** The three Firebase sign-in routes share one contract. */
 const firebaseSignInDoc = (label, signInProvider) => ({
   tags: ['Auth'],
@@ -34,7 +81,12 @@ const firebaseSignInDoc = (label, signInProvider) => ({
     `firebase.sign_in_provider to be "${signInProvider}". Email, name and photo come from the verified token, never ` +
     'from the body. A returning user is found by Firebase uid. A sign-in is never attached to an existing account ' +
     'by email: an email that is already registered is a 409 EMAIL_IN_USE. A new account is created on first sign-in. Rate limited to 30 requests per IP per ' +
-    '15 minutes across the three sign-in routes.',
+    '15 minutes across the three sign-in routes. ' +
+    'Terms and Privacy Policy: a new account must accept the current versions. Send both accepted_* fields on every ' +
+    'sign-in, null until the person has ticked the box; a new account is then refused with 400 TERMS_NOT_ACCEPTED, ' +
+    'and the app retries with the versions once the person accepts. The acceptance is recorded in the same transaction ' +
+    'as the account. A returning user is never refused for this (they accept through POST /user/legal-acceptance). ' +
+    'For app 1.0.11 and earlier, a request with neither field still creates the account as before, with nothing recorded.',
   requestBody: {
     required: true,
     content: {
@@ -49,12 +101,14 @@ const firebaseSignInDoc = (label, signInProvider) => ({
               description: 'Optional. Used only when creating an account and the token carries no name. Required for a new phone account (see 422 NAME_REQUIRED).',
               example: 'Jane Brown',
             },
+            ...acceptanceProperties,
           },
         },
       },
     },
   },
   responses: {
+    400: acceptanceRefusal('A new account has not accepted the current Terms of Service and Privacy Policy.'),
     200: {
       description: 'Signed in',
       content: {
@@ -114,6 +168,18 @@ const options = {
         },
       },
       schemas: {
+        LegalAcceptance: {
+          type: 'object',
+          description: 'Whether the person accepted the current Terms of Service and Privacy Policy (migration 032).',
+          properties: {
+            terms_version: { type: 'string', example: '1.0', description: 'The current Terms of Service version' },
+            privacy_version: { type: 'string', example: '1.0', description: 'The current Privacy Policy version' },
+            terms_accepted: { type: 'boolean', example: true },
+            privacy_accepted: { type: 'boolean', example: true },
+            terms_accepted_at: { type: 'string', format: 'date-time', nullable: true },
+            privacy_accepted_at: { type: 'string', format: 'date-time', nullable: true },
+          },
+        },
         Error: {
           type: 'object',
           properties: {
@@ -236,6 +302,11 @@ const options = {
         post: {
           tags: ['Auth'],
           summary: 'Register a new user',
+          description:
+            'The person must have read and accepted the current Terms of Service and Privacy Policy: send both ' +
+            'accepted_* fields. The acceptance is recorded, with the IP address and user agent, in the same transaction ' +
+            'as the account. For app 1.0.11 and earlier, a request with neither field still registers as before, with ' +
+            'nothing recorded; the account then shows legal.terms_accepted false in GET /user/profile.',
           requestBody: {
             required: true,
             content: {
@@ -250,6 +321,7 @@ const options = {
                     emergency_contact: { type: 'string', example: '+18687654321', description: 'Emergency contact phone number' },
                     user_type: { type: 'string', enum: ['CaribDrivers', 'CaribOfficials'], example: 'CaribDrivers' },
                     password: { type: 'string', example: 'Password@1', description: 'Min 6 chars, 1 uppercase, 1 number, 1 special symbol' },
+                    ...acceptanceProperties,
                   },
                 },
               },
@@ -276,8 +348,9 @@ const options = {
                 },
               },
             },
-            400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            400: acceptanceRefusal('The current Terms of Service and Privacy Policy were not accepted.'),
             409: { description: 'Email already exists', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            422: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           },
         },
       },
@@ -426,16 +499,26 @@ const options = {
                       data: {
                         type: 'object',
                         properties: {
-                          id: { type: 'string', format: 'uuid' },
-                          name: { type: 'string' },
-                          email: { type: 'string' },
-                          phone: { type: 'string', nullable: true },
-                          emergency_contact: { type: 'string', nullable: true },
-                          user_type: { type: 'string', enum: ['CaribDrivers', 'CaribOfficials'] },
-                          profile_image: { type: 'string', nullable: true },
-                          role: { type: 'string' },
-                          status: { type: 'string' },
-                          created_at: { type: 'string', format: 'date-time' },
+                          user: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string', format: 'uuid' },
+                              name: { type: 'string' },
+                              email: { type: 'string' },
+                              phone: { type: 'string', nullable: true },
+                              emergency_contact: { type: 'string', nullable: true },
+                              user_type: { type: 'string', enum: ['CaribDrivers', 'CaribOfficials'] },
+                              profile_image: { type: 'string', nullable: true },
+                              role: { type: 'string' },
+                              status: { type: 'string' },
+                              created_at: { type: 'string', format: 'date-time' },
+                            },
+                          },
+                          legal: {
+                            allOf: [{ $ref: '#/components/schemas/LegalAcceptance' }],
+                            nullable: true,
+                            description: 'Null when it could not be read; the app then asks nothing.',
+                          },
                         },
                       },
                     },
@@ -472,6 +555,54 @@ const options = {
             200: { description: 'Updated profile' },
             400: { description: 'Wrong current_password or validation error' },
             401: { description: 'Unauthorized' },
+          },
+        },
+      },
+      '/user/legal-acceptance': {
+        post: {
+          tags: ['User'],
+          summary: 'Accept the current Terms of Service and Privacy Policy',
+          description:
+            'Records that the signed-in person accepted the current versions: an account made before acceptance was ' +
+            'recorded, or one asked again after a new version. Both fields are required. Accepting a version already ' +
+            'recorded changes nothing; the first acceptance is kept as the evidence. Rate limited to 20 requests per ' +
+            'account per 15 minutes.',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['accepted_terms_version', 'accepted_privacy_version'],
+                  properties: acceptanceProperties,
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Recorded',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      message: { type: 'string', example: 'Thank you. Your acceptance has been recorded.' },
+                      data: {
+                        type: 'object',
+                        properties: { legal: { $ref: '#/components/schemas/LegalAcceptance' } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            400: acceptanceRefusal('Not the current versions of both documents.'),
+            401: { description: 'Unauthorized' },
+            404: { description: 'The account no longer exists', content: errorBody('User not found') },
+            429: { description: 'Too many requests from this account', content: errorBody('Too many attempts. Please wait 15 minutes and try again.') },
           },
         },
       },
@@ -1339,8 +1470,8 @@ const options = {
       '/members/nearby': {
         get: {
           tags: ['Members'],
-          summary: 'Member businesses near a position, nearest first',
-          description: 'Only listed members whose membership is active and not past its expiry. At most 50. No login.',
+          summary: 'Member businesses near a position, featured first, then nearest',
+          description: 'Only listed members whose membership is active and not past its expiry. At most 50. No login. Featured members (featured: true) come first, then the rest nearest first; dates go by the calendar day in Jamaica (America/Jamaica).',
           parameters: [
             { name: 'lat', in: 'query', required: true, schema: { type: 'number', minimum: -90, maximum: 90 }, example: 18.0179 },
             { name: 'lng', in: 'query', required: true, schema: { type: 'number', minimum: -180, maximum: 180 }, example: -76.8099 },
@@ -1372,8 +1503,9 @@ const options = {
                                 phone: { type: 'string', nullable: true },
                                 website: { type: 'string', nullable: true },
                                 description: { type: 'string', nullable: true },
-                                promo_text: { type: 'string', nullable: true, description: 'Null when empty or past promo_expires_at' },
+                                promo_text: { type: 'string', nullable: true, description: 'The offer to speak and show: a running campaign\'s offer (start and end days inclusive, Jamaica time; the latest-starting one when several run), otherwise the business promotion, null when empty or past promo_expires_at' },
                                 distance_m: { type: 'integer' },
+                                featured: { type: 'boolean', description: 'Featured placement today (migration 034). Added after app 1.0.11, which ignores it' },
                               },
                             },
                           },
@@ -1530,11 +1662,38 @@ const options = {
       '/emergency/{id}/resolve': {
         post: {
           tags: ['Emergency'],
-          summary: 'Resolve an emergency alert',
-          description: 'Only the original reporter or an admin can resolve.',
+          summary: 'Close an emergency alert (older clients)',
+          description: 'Kept for the app 1.0.11 and older desk pages. Never records "resolved": called by the reporter it cancels the alert (desk_status cancelled), called by a responder it marks the alert addressed. Use /cancel or /address.',
           security: [{ bearerAuth: [] }],
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          responses: { 200: { description: 'Alert resolved' }, 403: { description: 'Not authorized to resolve' } },
+          responses: { 200: { description: 'Alert cancelled or addressed' }, 403: { description: 'Neither the reporter nor a responder' } },
+        },
+      },
+      '/emergency/{id}/cancel': {
+        post: {
+          tags: ['Emergency'],
+          summary: 'Cancel your own emergency alert (desk_status pending/acknowledged -> cancelled)',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: {
+            200: { description: 'Alert cancelled, or already cancelled' },
+            403: { description: 'Only the person who raised the alert can cancel it' },
+            409: { description: 'Already closed with another status (addressed or resolved)' },
+          },
+        },
+      },
+      '/emergency/{id}/address': {
+        post: {
+          tags: ['Emergency'],
+          summary: 'Mark an alert addressed (responders and admins; desk_status pending/acknowledged -> addressed)',
+          description: 'Once acknowledged, only the operator who acknowledged it or an administrator may mark it addressed.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: {
+            200: { description: 'Alert addressed, or already addressed' },
+            403: { description: 'Not a responder, or acknowledged by another operator' },
+            409: { description: 'Already closed with another status (cancelled or resolved)' },
+          },
         },
       },
 
@@ -1775,22 +1934,24 @@ const options = {
                     contact_name: { type: 'string', maxLength: 200, nullable: true },
                     contact_position: { type: 'string', maxLength: 100, nullable: true },
                     contact_phone: { type: 'string', maxLength: 40, nullable: true },
+                    is_featured: { type: 'boolean', description: 'Featured placement; true needs featured_until' },
+                    featured_until: { type: 'string', format: 'date', nullable: true, example: '2027-11-18', description: 'Last featured day (Jamaica), inclusive' },
                   },
                 },
               },
             },
           },
-          responses: { 201: { description: 'data.business' }, 400: { description: 'Unknown tier_id' }, 422: { description: 'Validation failed' } },
+          responses: { 201: { description: 'data.business' }, 400: { description: 'Unknown tier_id, or featured with no end date' }, 422: { description: 'Validation failed' } },
         },
         get: {
           tags: ['Admin'],
-          summary: 'Get all businesses, newest first',
+          summary: 'Get all businesses, featured first, then newest',
           security: [{ bearerAuth: [] }],
           parameters: [
             { name: 'membership_status', in: 'query', schema: { type: 'string', enum: ['pending', 'active', 'suspended', 'expired', 'cancelled'] } },
             { name: 'is_active', in: 'query', schema: { type: 'string', enum: ['true', 'false'] } },
           ],
-          responses: { 200: { description: 'data.businesses, each with tier_name' } },
+          responses: { 200: { description: 'data.businesses, each with tier_name, featured_now (featured today and shown in the app), featured_until as YYYY-MM-DD, last_reminder_sent_at and last_reminder_sent_by_name' } },
         },
       },
       '/admin/businesses/{id}': {
@@ -1827,9 +1988,11 @@ const options = {
                     contact_name: { type: 'string', maxLength: 200, nullable: true },
                     contact_position: { type: 'string', maxLength: 100, nullable: true },
                     contact_phone: { type: 'string', maxLength: 40, nullable: true },
+                    is_featured: { type: 'boolean', description: 'Featured placement; true needs featured_until, given or stored' },
+                    featured_until: { type: 'string', format: 'date', nullable: true, example: '2027-11-18', description: 'Last featured day (Jamaica), inclusive' },
             } } } },
           },
-          responses: { 200: { description: 'data.business' }, 400: { description: 'Nothing to update, or unknown tier_id' }, 404: { description: 'Business not found' }, 422: { description: 'Validation failed' } },
+          responses: { 200: { description: 'data.business' }, 400: { description: 'Nothing to update, unknown tier_id, or featured with no end date' }, 404: { description: 'Business not found' }, 422: { description: 'Validation failed' } },
         },
       },
       '/admin/membership-tiers': {
@@ -1926,6 +2089,95 @@ const options = {
             400: { description: 'No location on the application and none given' },
             404: { description: 'Application not found' },
             422: { description: 'Validation failed' },
+          },
+        },
+      },
+      '/admin/membership-campaigns': {
+        get: {
+          tags: ['Admin'],
+          summary: 'Promotional and seasonal campaigns, newest start first',
+          description: 'Each has state (scheduled, running, finished or ended, by the calendar day in Jamaica) and in_use: the one the app speaks for its business today. When several run at once, the latest start wins, then the latest entered. data.today is today in Jamaica.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'business_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+            { name: 'state', in: 'query', schema: { type: 'string', enum: ['scheduled', 'running', 'finished', 'ended'] } },
+          ],
+          responses: { 200: { description: 'data.campaigns, data.today' }, 422: { description: 'Validation failed' } },
+        },
+        post: {
+          tags: ['Admin'],
+          summary: 'Enter a campaign for a business',
+          description: 'The offer is spoken and shown in the app from start_date to end_date, both inclusive (Jamaica days), instead of the business promotion. At most 366 days; an end before today is refused.',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', required: ['business_id', 'kind', 'offer_text', 'start_date', 'end_date'], properties: {
+              business_id: { type: 'string', format: 'uuid' },
+              kind: { type: 'string', enum: ['promotional', 'seasonal'] },
+              offer_text: { type: 'string', minLength: 1, maxLength: 280, example: '10% off lunch for CaribWayz drivers' },
+              start_date: { type: 'string', format: 'date', example: '2026-12-01' },
+              end_date: { type: 'string', format: 'date', example: '2026-12-31' },
+            } } } },
+          },
+          responses: { 201: { description: 'data.campaign' }, 400: { description: 'End before start, longer than 366 days, already over, or unknown business' }, 422: { description: 'Validation failed' } },
+        },
+      },
+      '/admin/membership-campaigns/{id}': {
+        patch: {
+          tags: ['Admin'],
+          summary: 'Edit a campaign',
+          description: 'Only the fields sent change; the dates are checked together with the stored ones.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: {
+              kind: { type: 'string', enum: ['promotional', 'seasonal'] },
+              offer_text: { type: 'string', minLength: 1, maxLength: 280, example: '10% off lunch for CaribWayz drivers' },
+              start_date: { type: 'string', format: 'date', example: '2026-12-01' },
+              end_date: { type: 'string', format: 'date', example: '2026-12-31' },
+            } } } } },
+          responses: { 200: { description: 'data.campaign' }, 400: { description: 'Nothing to update, or bad dates' }, 404: { description: 'Campaign not found' }, 422: { description: 'Validation failed' } },
+        },
+        delete: {
+          tags: ['Admin'],
+          summary: 'Delete a campaign',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { 200: { description: 'data.id' }, 404: { description: 'Campaign not found' } },
+        },
+      },
+      '/admin/membership-campaigns/{id}/end': {
+        post: {
+          tags: ['Admin'],
+          summary: 'End a campaign now, keeping its dates on record',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { 200: { description: 'data.campaign' }, 404: { description: 'Campaign not found' }, 409: { description: 'Already ended' } },
+        },
+      },
+      '/admin/membership-renewals': {
+        get: {
+          tags: ['Admin'],
+          summary: 'Renewal reminders list',
+          description: 'Active and expired memberships whose end is within 30 days of now: data.ending_soon (soonest first) and data.recently_expired (latest first). Each has recipient_email, days_left (Jamaica days), last_reminder_sent_at, last_reminder_sent_by_name and reminded_today. data.email_configured says whether Send reminder can work.',
+          security: [{ bearerAuth: [] }],
+          responses: { 200: { description: 'data.window_days, data.email_configured, data.ending_soon, data.recently_expired' } },
+        },
+      },
+      '/admin/membership-renewals/{id}/remind': {
+        post: {
+          tags: ['Admin'],
+          summary: 'Email a business a renewal reminder',
+          description: 'Sent only by this call (no schedule), to the business contact_email, else business_email, with replies going to the membership settings contact email (else ADMIN_EMAIL). Records last_reminder_sent_at and by whom. A second reminder the same day (Jamaica) needs resend: true.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { resend: { type: 'boolean', default: false } } } } } },
+          responses: {
+            200: { description: 'data.renewal' },
+            400: { description: 'No contact or business email, or no end date' },
+            404: { description: 'Business not found' },
+            409: { description: 'Already sent today (send resend: true), or the membership is not active or expired' },
+            502: { description: 'The mail server refused it; nothing recorded' },
+            503: { description: 'SMTP is not configured on the server' },
           },
         },
       },

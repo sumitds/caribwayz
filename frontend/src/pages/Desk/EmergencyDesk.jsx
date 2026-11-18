@@ -10,11 +10,11 @@ import Button from '../../components/UI/Button';
 import Modal from '../../components/UI/Modal';
 import { useAuth } from '../../context/AuthContext';
 import {
-  listEmergencies, acknowledgeEmergency, releaseEmergency, resolveEmergency,
+  listEmergencies, acknowledgeEmergency, releaseEmergency, addressEmergency,
 } from '../../api/emergency';
 import {
   typeLabel, groupAlerts, newlyWaiting, formatAgo, isOverdue, mapLink, formatCoordinates,
-  hasLocation, telLink, reporterLabel, pageTitle, errorMessage,
+  hasLocation, telLink, reporterLabel, pageTitle, errorMessage, deskStatusOf, deskStatusLabel, canMarkAddressed,
 } from './deskModel';
 
 /** How often the queue is refreshed. An SOS should reach the desk within seconds. */
@@ -52,8 +52,9 @@ const readSoundPref = () => {
 };
 
 /**
- * One desk action (take, return, resolve). Whatever the outcome, the queue is
- * refetched, so a 409 "already taken" immediately shows who has it.
+ * One desk action (acknowledge, return to queue, mark Addressed). Whatever the
+ * outcome, the queue is refetched, so a 409 "already taken" immediately shows
+ * who has it.
  */
 const useDeskAction = (fn, successMessage, setBusyId) => {
   const queryClient = useQueryClient();
@@ -71,7 +72,22 @@ const useDeskAction = (fn, successMessage, setBusyId) => {
 
 const sectionTitle = { fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '1.25rem 0 0.6rem' };
 
-const AlertCard = ({ alert, mode, isAdmin, busy, onTake, onRelease, onResolve, now }) => {
+const STATUS_COLORS = { pending: '#CC2229', acknowledged: '#2D8C00' };
+
+const StatusChip = ({ alert }) => (
+  <span
+    data-testid={`desk-status-${alert.id}`}
+    style={{
+      fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase',
+      color: STATUS_COLORS[deskStatusOf(alert)] || 'var(--text-muted)',
+      border: '1px solid currentColor', borderRadius: 999, padding: '0.1rem 0.5rem',
+    }}
+  >
+    {deskStatusLabel(alert)}
+  </span>
+);
+
+const AlertCard = ({ alert, mode, isAdmin, busy, onTake, onRelease, onAddress, now }) => {
   const overdue = mode === 'waiting' && isOverdue(alert, now);
   const tel = telLink(alert.reporter_phone);
   const link = mapLink(alert.latitude, alert.longitude);
@@ -86,9 +102,12 @@ const AlertCard = ({ alert, mode, isAdmin, busy, onTake, onRelease, onResolve, n
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <strong style={{ fontSize: '1.05rem' }}>{typeLabel(alert.type)}</strong>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+          <strong style={{ fontSize: '1.05rem' }}>{typeLabel(alert.type)}</strong>
+          <StatusChip alert={alert} />
+        </span>
         <span style={{ fontSize: '0.82rem', fontWeight: 700, color: overdue ? '#CC2229' : 'var(--text-muted)' }}>
-          {overdue ? 'Waiting ' : 'Raised '}{formatAgo(alert.created_at, now)}
+          {overdue ? 'Pending ' : 'Raised '}{formatAgo(alert.created_at, now)}
         </span>
       </div>
 
@@ -120,7 +139,7 @@ const AlertCard = ({ alert, mode, isAdmin, busy, onTake, onRelease, onResolve, n
 
       {mode !== 'waiting' ? (
         <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-          {mode === 'mine' ? 'You have this emergency' : `Taken by ${alert.acknowledged_by_name}`}
+          {mode === 'mine' ? 'Acknowledged by you' : `Acknowledged by ${alert.acknowledged_by_name}`}
           {alert.acknowledged_at ? ` - ${formatAgo(alert.acknowledged_at, now)}` : ''}
         </div>
       ) : null}
@@ -128,7 +147,7 @@ const AlertCard = ({ alert, mode, isAdmin, busy, onTake, onRelease, onResolve, n
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.2rem' }}>
         {mode === 'waiting' ? (
           <Button size="sm" variant="danger" loading={busy} onClick={() => onTake(alert)}>
-            <MdPanTool /> Take this emergency
+            <MdPanTool /> Acknowledge (take it)
           </Button>
         ) : null}
         {mode === 'mine' || (mode === 'others' && isAdmin) ? (
@@ -136,9 +155,9 @@ const AlertCard = ({ alert, mode, isAdmin, busy, onTake, onRelease, onResolve, n
             <MdUndo /> Return to queue
           </Button>
         ) : null}
-        {mode !== 'others' || isAdmin ? (
-          <Button size="sm" variant="success" disabled={busy} onClick={() => onResolve(alert)}>
-            <MdCheckCircle /> Resolve
+        {canMarkAddressed(alert, mode, isAdmin) ? (
+          <Button size="sm" variant="success" disabled={busy} onClick={() => onAddress(alert)}>
+            <MdCheckCircle /> Mark Addressed
           </Button>
         ) : null}
       </div>
@@ -165,7 +184,7 @@ const EmergencyDesk = () => {
   const { user, isAdmin } = useAuth();
   const [soundOn, setSoundOn] = useState(readSoundPref);
   const [busyId, setBusyId] = useState(null);
-  const [confirmResolve, setConfirmResolve] = useState(null);
+  const [confirmAddress, setConfirmAddress] = useState(null);
   const [now, setNow] = useState(Date.now());
   const previousWaiting = useRef(null);
 
@@ -193,7 +212,7 @@ const EmergencyDesk = () => {
     previousWaiting.current = groups.waiting.map((a) => a.id);
     if (fresh.length > 0) {
       if (soundOn) playAlertTone();
-      toast.error(fresh.length === 1 ? 'New emergency waiting' : `${fresh.length} new emergencies waiting`, { duration: 6000 });
+      toast.error(fresh.length === 1 ? 'New emergency pending' : `${fresh.length} new emergencies pending`, { duration: 6000 });
     }
   }, [dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -212,7 +231,7 @@ const EmergencyDesk = () => {
 
   const take = useDeskAction(acknowledgeEmergency, 'You have taken this emergency', setBusyId);
   const release = useDeskAction(releaseEmergency, 'Returned to the queue', setBusyId);
-  const resolve = useDeskAction(resolveEmergency, 'Emergency resolved', setBusyId);
+  const address = useDeskAction(addressEmergency, 'Emergency marked Addressed', setBusyId);
 
   const located = (data || []).filter((a) => hasLocation(a.latitude, a.longitude));
   const forbidden = isError && error?.response?.status === 403;
@@ -221,7 +240,7 @@ const EmergencyDesk = () => {
     isAdmin, busyId, now,
     onTake: (a) => take.mutate(a),
     onRelease: (a) => release.mutate(a),
-    onResolve: (a) => setConfirmResolve(a),
+    onAddress: (a) => setConfirmAddress(a),
   };
 
   return (
@@ -232,7 +251,8 @@ const EmergencyDesk = () => {
             <MdSos size={28} color="#CC2229" /> Emergency Desk
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.3rem' }}>
-            Take an emergency before calling, so no two operators answer the same SOS. Refreshes every {REFRESH_MS / 1000} seconds.
+            Acknowledge an emergency (take it) before calling, so no two operators answer the same SOS. Mark it Addressed
+            once the desk has dealt with it. Refreshes every {REFRESH_MS / 1000} seconds.
           </p>
         </div>
         <Button variant="secondary" size="sm" onClick={toggleSound}>
@@ -282,12 +302,12 @@ const EmergencyDesk = () => {
                     key={a.id}
                     center={[Number(a.latitude), Number(a.longitude)]}
                     radius={10}
-                    pathOptions={{ color: a.desk_state === 'acknowledged' ? '#2D8C00' : '#CC2229', fillOpacity: 0.7 }}
+                    pathOptions={{ color: deskStatusOf(a) === 'acknowledged' ? '#2D8C00' : '#CC2229', fillOpacity: 0.7 }}
                   >
                     <Popup>
                       <strong>{typeLabel(a.type)}</strong><br />
                       {reporterLabel(a.reporter_name)}<br />
-                      {a.desk_state === 'acknowledged' ? `Taken by ${a.acknowledged_by_name}` : 'Waiting'}
+                      {deskStatusOf(a) === 'acknowledged' ? `Acknowledged by ${a.acknowledged_by_name}` : 'Pending'}
                     </Popup>
                   </CircleMarker>
                 ))}
@@ -295,28 +315,32 @@ const EmergencyDesk = () => {
             </div>
           ) : null}
 
-          <Section title="Waiting" color="#CC2229" alerts={groups.waiting} mode="waiting"
-            empty="No emergency is waiting." {...cardProps} />
-          <Section title="Yours" color="#2D8C00" alerts={groups.mine} mode="mine"
-            empty="You have not taken an emergency." {...cardProps} />
-          <Section title="Taken by other operators" color="var(--text-muted)" alerts={groups.others} mode="others"
-            empty="No other operator is handling an emergency." {...cardProps} />
+          <Section title="Pending" color="#CC2229" alerts={groups.waiting} mode="waiting"
+            empty="No emergency is pending." {...cardProps} />
+          <Section title="Acknowledged by you" color="#2D8C00" alerts={groups.mine} mode="mine"
+            empty="You have not acknowledged an emergency." {...cardProps} />
+          <Section title="Acknowledged by other operators" color="var(--text-muted)" alerts={groups.others} mode="others"
+            empty="No other operator has acknowledged an emergency." {...cardProps} />
         </>
       )}
 
-      {confirmResolve ? (
-        <Modal title="Resolve this emergency?" onClose={() => setConfirmResolve(null)}>
+      {confirmAddress ? (
+        <Modal title="Mark this emergency Addressed?" onClose={() => setConfirmAddress(null)}>
+          <p style={{ marginBottom: '0.75rem' }}>
+            {typeLabel(confirmAddress.type)} for {reporterLabel(confirmAddress.reporter_name)}. Addressed means the desk
+            has dealt with this alert in CaribWayz. It does not say that help has arrived or that the emergency is over,
+            and the person and their trusted contacts are told exactly that.
+          </p>
           <p style={{ marginBottom: '1rem' }}>
-            {typeLabel(confirmResolve.type)} for {reporterLabel(confirmResolve.reporter_name)}. Resolve it only when
-            the person is safe or help is with them. It leaves the queue for every operator.
+            It leaves the queue for every operator and cannot be undone.
           </p>
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-            <Button variant="secondary" onClick={() => setConfirmResolve(null)}>Cancel</Button>
+            <Button variant="secondary" onClick={() => setConfirmAddress(null)}>Keep it open</Button>
             <Button
               variant="success"
-              onClick={() => { resolve.mutate(confirmResolve); setConfirmResolve(null); }}
+              onClick={() => { address.mutate(confirmAddress); setConfirmAddress(null); }}
             >
-              <MdCheckCircle /> Resolve
+              <MdCheckCircle /> Mark Addressed
             </Button>
           </div>
         </Modal>

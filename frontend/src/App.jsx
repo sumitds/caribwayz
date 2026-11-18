@@ -32,6 +32,8 @@ import AdminPartners from './pages/Admin/AdminPartners';
 import AdminTiers from './pages/Admin/AdminTiers';
 import AdminApplications from './pages/Admin/AdminApplications';
 import AdminMembershipSettings from './pages/Admin/AdminMembershipSettings';
+import AdminCampaigns from './pages/Admin/AdminCampaigns';
+import AdminRenewals from './pages/Admin/AdminRenewals';
 import AdminPayouts from './pages/Admin/AdminPayouts';
 
 // Public pages, no login
@@ -40,6 +42,8 @@ import LegalPage from './pages/Public/LegalPage';
 import privacyPolicy from './legal/privacyPolicy';
 import termsOfService from './legal/termsOfService';
 import businessMembershipPolicy from './legal/businessMembershipPolicy';
+import emergencyDeskDisclaimer from './legal/emergencyDeskDisclaimer';
+import { MEMBERSHIP_POLICY_APPROVED } from './legal/legalDocument';
 
 const App = () => (
   <AuthProvider>
@@ -52,9 +56,10 @@ const App = () => (
 
       {/* Public: the membership page and the store listings' legal pages. */}
       <Route path="/membership" element={<MembershipPage />} />
-      <Route path="/membership/policy" element={<LegalPage markdown={businessMembershipPolicy} />} />
+      <Route path="/membership/policy" element={<LegalPage markdown={businessMembershipPolicy} approved={MEMBERSHIP_POLICY_APPROVED} />} />
       <Route path="/privacy" element={<LegalPage markdown={privacyPolicy} />} />
       <Route path="/terms" element={<LegalPage markdown={termsOfService} />} />
+      <Route path="/emergency-desk-disclaimer" element={<LegalPage markdown={emergencyDeskDisclaimer} />} />
 
       {/* User routes */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -82,6 +87,8 @@ const App = () => (
       <Route path="/admin/membership-tiers" element={<ProtectedRoute adminOnly><AdminTiers /></ProtectedRoute>} />
       <Route path="/admin/membership-applications" element={<ProtectedRoute adminOnly><AdminApplications /></ProtectedRoute>} />
       <Route path="/admin/membership-settings" element={<ProtectedRoute adminOnly><AdminMembershipSettings /></ProtectedRoute>} />
+      <Route path="/admin/membership-campaigns" element={<ProtectedRoute adminOnly><AdminCampaigns /></ProtectedRoute>} />
+      <Route path="/admin/membership-renewals" element={<ProtectedRoute adminOnly><AdminRenewals /></ProtectedRoute>} />
       <Route path="/admin/payouts" element={<ProtectedRoute adminOnly><AdminPayouts /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

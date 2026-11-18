@@ -5,6 +5,7 @@ const { success, error, notFound } = require('../utils/response');
 const weatherAlerts = require('../services/weatherAlertService');
 const { isSessionId, notifySessionsRevoked } = require('../services/sessionService');
 const { normalizeContactPhone } = require('../utils/phone');
+const legalAcceptance = require('../services/legalAcceptance');
 
 const getProfile = async (req, res) => {
   try {
@@ -14,10 +15,61 @@ const getProfile = async (req, res) => {
       [req.user.id]
     );
     if (result.rows.length === 0) return notFound(res, 'User not found');
-    return success(res, { user: result.rows[0] });
+    return success(res, { user: result.rows[0], legal: await legalStatusOrNull(req.user.id) });
   } catch (err) {
     console.error('Get profile error:', err);
     return error(res, 'Failed to fetch profile', 500);
+  }
+};
+
+/**
+ * Whether the caller accepted the current Terms of Service and Privacy
+ * Policy (services/legalAcceptance.js), for the profile. Null when it could
+ * not be read: the profile is still answered, the failure is logged, and the
+ * app treats null as unknown and asks nothing, rather than blocking a person
+ * who may well have accepted.
+ */
+const legalStatusOrNull = async (userId) => {
+  try {
+    return await legalAcceptance.acceptanceStatus(query, userId);
+  } catch (err) {
+    console.error(`Reading legal acceptance failed (user ${userId}):`, err.message);
+    return null;
+  }
+};
+
+/** Postgres foreign_key_violation. */
+const FOREIGN_KEY_VIOLATION = '23503';
+
+/**
+ * Records that the caller accepted the current Terms of Service and Privacy
+ * Policy: an account made before acceptance was recorded, or one asked again
+ * after a new version. Both fields are required and must be the current
+ * versions; accepting a version already recorded changes nothing.
+ */
+const acceptLegalTerms = async (req, res) => {
+  try {
+    const acceptance = legalAcceptance.readAcceptance(req.body);
+    if (acceptance.status === 'absent') {
+      return legalAcceptance.refuseAcceptance(res, legalAcceptance.CODES.NOT_ACCEPTED);
+    }
+    if (acceptance.status === 'refused') {
+      return legalAcceptance.refuseAcceptance(res, acceptance.code);
+    }
+
+    await legalAcceptance.recordAcceptance(query, {
+      userId: req.user.id,
+      versions: acceptance.versions,
+      method: legalAcceptance.METHODS.reaccept,
+      ...legalAcceptance.evidenceFrom(req),
+    });
+    const legal = await legalAcceptance.acceptanceStatus(query, req.user.id);
+    return success(res, { legal }, 'Thank you. Your acceptance has been recorded.');
+  } catch (err) {
+    // The account behind a still-valid token was deleted.
+    if (err.code === FOREIGN_KEY_VIOLATION) return notFound(res, 'User not found');
+    console.error(`Legal acceptance error (user ${req.user && req.user.id}):`, err);
+    return error(res, 'Your acceptance could not be recorded. Please try again.', 500);
   }
 };
 
@@ -273,5 +325,5 @@ const updateAlertArea = async (req, res) => {
 
 module.exports = {
   getProfile, updateProfile, getPreferences, updatePreferences,
-  registerDeviceToken, removeDeviceToken, updateAlertArea, MAX_DEVICES_PER_USER,
+  registerDeviceToken, removeDeviceToken, updateAlertArea, acceptLegalTerms, MAX_DEVICES_PER_USER,
 };

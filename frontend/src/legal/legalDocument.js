@@ -1,6 +1,7 @@
-// Reads the Privacy Policy and Terms of Service for the public /privacy and
-// /terms pages, the same way the app does (mobile/lib/src/settings/legal/
-// legal_document.dart). Kept free of React so it runs under node --test.
+// Reads the legal documents for the public pages (/privacy, /terms,
+// /emergency-desk-disclaimer and /membership/policy), the same way the app does
+// (mobile/lib/src/settings/legal/legal_document.dart). Kept free of React so it
+// runs under node --test.
 //
 // The text is a small Markdown subset: one `#` title, `##` and `###`
 // headings, paragraphs, `- ` bullets and `**bold**`. A `>` note that starts
@@ -8,11 +9,17 @@
 // their own note instead (see LEGAL_APPROVED), so it is left out.
 
 /**
- * Flip to true once the client's lawyer has approved both documents, as
- * LegalDocuments.approvedByLawyer in the app. Until then every page that
- * shows them says they are a draft.
+ * Whether the Privacy Policy, Terms of Agreement and Emergency Desk Disclaimer
+ * are final, as LegalDocuments.approvedByLawyer in the app. The client sent
+ * all three as final on 17 November 2026, so their pages carry no draft note.
  */
-export const LEGAL_APPROVED = false;
+export const LEGAL_APPROVED = true;
+
+/**
+ * Whether the Business Membership Policy is final. It is still the client's
+ * draft of 9 November 2026, so /membership/policy keeps its draft note.
+ */
+export const MEMBERSHIP_POLICY_APPROVED = false;
 
 export const DRAFT_LABEL = 'Draft, pending legal review';
 

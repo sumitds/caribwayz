@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { triggerEmergency, resolveEmergency } from '../../api/emergency';
+import { triggerEmergency, cancelEmergency } from '../../api/emergency';
+import { deskStatusLabel } from '../Desk/deskModel';
 import Layout from '../../components/Layout/Layout';
 import Button from '../../components/UI/Button';
 import Input from '../../components/UI/Input';
@@ -27,15 +28,15 @@ const EmergencyPage = () => {
     mutationFn: triggerEmergency,
     onSuccess: (res) => {
       setActiveAlert(res.data.data.alert);
-      toast.success('Emergency alert triggered! Help is on the way.', { duration: 6000 });
+      toast.success('Emergency alert sent to the CaribWayz Emergency Desk. Status: Pending.', { duration: 6000 });
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to trigger emergency'),
   });
 
-  const resolveMutation = useMutation({
-    mutationFn: resolveEmergency,
-    onSuccess: () => { setActiveAlert(null); toast.success('Emergency resolved'); },
-    onError: (err) => toast.error(err.response?.data?.message || 'Failed to resolve'),
+  const cancelMutation = useMutation({
+    mutationFn: cancelEmergency,
+    onSuccess: () => { setActiveAlert(null); toast.success('Emergency alert cancelled'); },
+    onError: (err) => toast.error(err.response?.data?.message || 'The alert could not be cancelled'),
   });
 
   const getLocation = () => {
@@ -57,20 +58,25 @@ const EmergencyPage = () => {
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <MdSos size={56} color="var(--danger)" />
           <h2 style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.5rem' }}>Emergency Alert</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Send an emergency alert to notify nearby users and emergency services</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Send an emergency alert to the CaribWayz Emergency Desk</p>
+          <p role="note" style={{ fontSize: '0.85rem', marginTop: '0.6rem', fontWeight: 600 }}>
+            The Emergency Desk is not monitored around the clock and does not call emergency services for you.
+            For immediate help in Jamaica, call 119 (police) or 110 (fire and ambulance).
+          </p>
         </div>
 
         {activeAlert ? (
           <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid var(--danger)', borderRadius: 'var(--radius)', padding: '2rem', textAlign: 'center' }}>
-            <Badge status={activeAlert.status} label={`Emergency ${activeAlert.status}`} />
+            <Badge status={activeAlert.status} label={`Status: ${deskStatusLabel(activeAlert)}`} />
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: '1rem 0 0.5rem', textTransform: 'capitalize' }}>
               {activeAlert.type} Emergency
             </h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '1.5rem' }}>
-              Alert is active. Emergency services have been notified.
+              The alert is with the CaribWayz Emergency Desk. It has not been sent to the police, fire or ambulance
+              service, and the desk is not monitored around the clock.
             </p>
-            <Button variant="success" onClick={() => resolveMutation.mutate(activeAlert.id)} loading={resolveMutation.isPending}>
-              Mark as Resolved
+            <Button variant="success" onClick={() => cancelMutation.mutate(activeAlert.id)} loading={cancelMutation.isPending}>
+              Cancel this alert
             </Button>
           </div>
         ) : (
